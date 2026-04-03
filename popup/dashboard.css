@@ -1,0 +1,274 @@
+/* ═══════════════════════════════════════════════════
+   WAuto Pro — Dashboard Styles (Phase 4)
+   ═══════════════════════════════════════════════════ */
+
+/* ── DATE FILTER BAR ── */
+.dash-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.dash-date-filter {
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--navy-800);
+  border: 1px solid var(--navy-600);
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235A6D8A'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+.dash-date-filter:focus { border-color: var(--emerald-500); }
+
+.dash-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.dash-refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--navy-800);
+  border: 1px solid var(--navy-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dash-refresh-btn:hover { border-color: var(--emerald-500); color: var(--emerald-400); }
+
+/* ── KPI CARDS ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.kpi-card {
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--navy-600);
+  background: var(--navy-800);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.kpi-card--blue::before { background: linear-gradient(90deg, #3B82F6, #60A5FA); }
+.kpi-card--green::before { background: linear-gradient(90deg, var(--emerald-500), var(--emerald-400)); }
+.kpi-card--gold::before { background: linear-gradient(90deg, #F59E0B, #FBBF24); }
+.kpi-card--orange::before { background: linear-gradient(90deg, #F97316, #FB923C); }
+
+.kpi-icon { font-size: 20px; margin-bottom: 4px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.kpi-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.kpi-sub { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* ── SVG BAR CHART ── */
+.chart-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--navy-600);
+  background: var(--navy-800);
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.chart-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.chart-legend-dot--sent { background: #3B82F6; }
+.chart-legend-dot--replied { background: var(--emerald-500); }
+
+.chart-svg { width: 100%; overflow: visible; }
+
+.chart-bar {
+  transition: height 0.6s ease, y 0.6s ease;
+  cursor: pointer;
+}
+
+.chart-bar:hover { filter: brightness(1.2); }
+
+.chart-tooltip {
+  position: absolute;
+  padding: 6px 10px;
+  background: var(--navy-700);
+  border: 1px solid var(--navy-500);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+
+/* ── FUNNEL ── */
+.funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.funnel-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 80px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.funnel-bar-track {
+  flex: 1;
+  height: 22px;
+  background: var(--navy-900);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.funnel-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s ease;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  min-width: 30px;
+}
+
+.funnel-bar--contacted { background: linear-gradient(90deg, #6366F1, #818CF8); }
+.funnel-bar--sent { background: linear-gradient(90deg, #3B82F6, #60A5FA); }
+.funnel-bar--replied { background: linear-gradient(90deg, var(--emerald-600), var(--emerald-400)); }
+.funnel-bar--followup { background: linear-gradient(90deg, #F59E0B, #FBBF24); }
+.funnel-bar--converted { background: linear-gradient(90deg, #10B981, #34D399); }
+
+.funnel-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── FOLLOW-UP STATS ── */
+.fu-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.fu-stat-box {
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--navy-600);
+  background: var(--navy-800);
+  text-align: center;
+}
+
+.fu-stat-label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+.fu-stat-value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.fu-stat-detail { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── CAMPAIGN PERF TABLE ── */
+.dash-table-wrap {
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--navy-600);
+}
+
+.dash-table-wrap::-webkit-scrollbar { width: 4px; }
+.dash-table-wrap::-webkit-scrollbar-track { background: var(--navy-900); }
+.dash-table-wrap::-webkit-scrollbar-thumb { background: var(--navy-500); border-radius: 2px; }
+
+/* ── ERROR STATS ── */
+.error-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.error-stat-box {
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--navy-900);
+  text-align: center;
+}
+
+.error-stat-box .kpi-value { font-size: 18px; }
+.error-stat-box .kpi-label { font-size: 9px; }
+
+/* ── EMPTY STATE ── */
+.dash-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.dash-empty svg { margin-bottom: 12px; opacity: 0.3; }
+
+/* ── EXPORT REPORT BTN ── */
+.dash-export-btn {
+  margin-top: 12px;
+  width: 100%;
+}

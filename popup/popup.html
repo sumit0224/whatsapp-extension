@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=560">
+  <title>WAuto Pro — WhatsApp Outreach</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="leads.css">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <!-- ───── HEADER ───── -->
+  <header class="app-header">
+    <div class="header-brand">
+      <img src="../icons/icon128.png" alt="WAuto Pro" class="header-logo">
+      <div><h1 class="header-title">WAuto Pro</h1><p class="header-subtitle">WhatsApp Lead Outreach</p></div>
+    </div>
+    <span class="header-version">v4.0.0</span>
+  </header>
+
+  <!-- ───── TAB BAR (5 tabs) ───── -->
+  <nav class="tab-bar" role="tablist">
+    <button class="tab-btn active" data-tab="campaign" role="tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+      Campaign
+    </button>
+    <button class="tab-btn" data-tab="leads" role="tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      Leads
+    </button>
+    <button class="tab-btn" data-tab="dashboard" role="tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+      Dashboard
+    </button>
+    <button class="tab-btn" data-tab="templates" role="tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Templates
+    </button>
+    <button class="tab-btn" data-tab="settings" role="tab">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </button>
+  </nav>
+
+  <!-- ═══════════ CAMPAIGN TAB ═══════════ -->
+  <div class="tab-panel active" id="tab-campaign" role="tabpanel">
+    <!-- SESSION BANNER -->
+    <div class="session-banner session-banner--checking" id="session-banner">
+      <div class="session-banner-content"><span class="session-dot"></span><span class="session-text" id="session-text">Checking WhatsApp Web…</span></div>
+      <button class="btn btn-sm btn-session-action hidden" id="btn-open-wa">Open WhatsApp</button>
+    </div>
+
+    <!-- MODE SELECTOR -->
+    <div class="mode-selector" id="mode-selector">
+      <label class="mode-option">
+        <input type="radio" name="sendMode" value="dom" checked id="mode-dom"><span class="mode-radio"></span>
+        <span class="mode-label"><strong>DOM Mode</strong><small>Auto-send via WhatsApp Web</small></span>
+      </label>
+      <label class="mode-option">
+        <input type="radio" name="sendMode" value="link" id="mode-link"><span class="mode-radio"></span>
+        <span class="mode-label"><strong>Link Mode</strong><small>Open wa.me links (manual send)</small></span>
+      </label>
+    </div>
+
+    <!-- QUICK SEND (Comma-Separated) -->
+    <section class="card" id="section-quick-send">
+      <div class="card-title followup-toggle" id="quicksend-toggle">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+        Quick Send <span class="badge badge-info">New</span> <span class="followup-chevron" id="quicksend-chevron">▶</span>
+      </div>
+      <div class="followup-body hidden" id="quicksend-body">
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Send a quick message to comma-separated numbers (up to 50).</p>
+        <div class="delay-field" style="margin-bottom:10px;">
+          <label>Phone Numbers (comma separated)</label>
+          <textarea id="quicksend-numbers" class="input" rows="2" placeholder="e.g. 9876543210, 9123456789"></textarea>
+        </div>
+        <div class="delay-field" style="margin-bottom:10px;">
+          <label>Message</label>
+          <textarea id="quicksend-message" class="template-textarea" rows="3" placeholder="Type your quick message here…"></textarea>
+        </div>
+        <div class="error-msg hidden" id="quicksend-error" style="margin-bottom:8px;"></div>
+        <div class="completion-msg hidden" id="quicksend-status" style="margin-bottom:8px;"></div>
+        <button class="btn btn-outline" id="btn-quicksend-action" style="width:100%;">🚀 Send to <span id="quicksend-count">0</span> Numbers</button>
+      </div>
+    </section>
+
+    <!-- UPLOAD -->
+    <section class="card" id="section-upload">
+      <h2 class="card-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload Contacts</h2>
+      <div class="drop-zone" id="drop-zone">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="drop-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p class="drop-text">Drag &amp; drop <strong>.xlsx</strong> or <strong>.csv</strong></p>
+        <p class="drop-subtext">or click to browse</p>
+        <input type="file" id="file-input" accept=".xlsx,.csv,.xls" hidden>
+      </div>
+      <div class="file-info hidden" id="file-info">
+        <div class="file-info-inner"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span id="file-name">filename.xlsx</span><span class="badge" id="row-count">0 rows</span></div>
+        <button class="btn btn-ghost btn-sm" id="btn-clear-file">Clear</button>
+      </div>
+      <div class="duplicate-info hidden" id="duplicate-info"><span id="duplicate-count">0</span> duplicate phone numbers removed</div>
+      <div class="duplicate-info hidden" id="already-messaged-info" style="background:rgba(37,211,102,0.12);color:var(--emerald-400);"><span id="already-messaged-count">0</span> already messaged (will be skipped)</div>
+      <label class="checkbox-row hidden" id="resend-row"><input type="checkbox" id="chk-resend"><span>Re-send to previously messaged contacts</span></label>
+    </section>
+
+    <!-- PREVIEW TABLE -->
+    <section class="card hidden" id="section-preview">
+      <h2 class="card-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Data Preview <span class="badge badge-info" id="contact-count">0</span></h2>
+      <div class="table-wrapper"><table class="data-table" id="preview-table"><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Course</th><th>City</th></tr></thead><tbody id="preview-tbody"></tbody></table></div>
+    </section>
+
+    <!-- TEMPLATE -->
+    <section class="card" id="section-template">
+      <h2 class="card-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Message Template</h2>
+      <!-- Template Mode -->
+      <div class="tpl-mode-selector">
+        <label class="mode-option mode-option--sm"><input type="radio" name="tplMode" value="single" checked id="tpl-mode-single"><span class="mode-radio"></span><span class="mode-label"><strong>Single Template</strong></span></label>
+        <label class="mode-option mode-option--sm"><input type="radio" name="tplMode" value="rotate" id="tpl-mode-rotate"><span class="mode-radio"></span><span class="mode-label"><strong>Rotate Templates</strong></span></label>
+      </div>
+      <!-- Single mode -->
+      <div id="single-template-section">
+        <div class="variable-btns">
+          <button class="btn btn-variable" data-var="{{name}}">+ Name</button>
+          <button class="btn btn-variable" data-var="{{course}}">+ Course</button>
+          <button class="btn btn-variable" data-var="{{city}}">+ City</button>
+        </div>
+        <textarea id="template-input" class="template-textarea" placeholder="Type your message template here…" rows="4"></textarea>
+        <div class="preview-box" id="preview-box">
+          <p class="preview-label">Live Preview</p>
+          <p class="preview-message" id="preview-message">Your personalised message will appear here…</p>
+        </div>
+      </div>
+      <!-- Rotate mode -->
+      <div id="rotate-template-section" class="hidden">
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Select 2–5 templates to rotate between contacts:</p>
+        <div id="rotate-template-list"></div>
+      </div>
+    </section>
+
+    <!-- FOLLOW-UPS -->
+    <section class="card" id="section-followup">
+      <div class="card-title followup-toggle" id="followup-toggle">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        Follow-up Sequence <span class="followup-chevron" id="followup-chevron">▶</span>
+      </div>
+      <div class="followup-body hidden" id="followup-body">
+        <div class="followup-day"><div class="followup-day-header"><label class="followup-day-toggle"><input type="checkbox" id="fu-day1-enabled" checked><span>Day 1 — 24 Hours</span></label></div>
+          <div class="variable-btns" style="margin-top:8px;"><button class="btn btn-variable btn-sm" data-target="fu-day1-template" data-var="{{name}}">+ Name</button><button class="btn btn-variable btn-sm" data-target="fu-day1-template" data-var="{{course}}">+ Course</button></div>
+          <textarea id="fu-day1-template" class="template-textarea" rows="3">Hi {{name}}, just following up on {{course}}. A few seats are still open. Reply 'YES' to get full details or I can arrange a quick call! 🎓</textarea></div>
+        <div class="followup-day"><div class="followup-day-header"><label class="followup-day-toggle"><input type="checkbox" id="fu-day2-enabled" checked><span>Day 2 — 48 Hours</span></label></div>
+          <div class="variable-btns" style="margin-top:8px;"><button class="btn btn-variable btn-sm" data-target="fu-day2-template" data-var="{{name}}">+ Name</button><button class="btn btn-variable btn-sm" data-target="fu-day2-template" data-var="{{course}}">+ Course</button></div>
+          <textarea id="fu-day2-template" class="template-textarea" rows="3">Hi {{name}}, last reminder about {{course}}! Batch filling fast. If you're interested, let me know and I'll block a seat for you. 📚</textarea></div>
+        <div class="followup-day"><div class="followup-day-header"><label class="followup-day-toggle"><input type="checkbox" id="fu-day3-enabled" checked><span>Day 3 — 72 Hours</span></label></div>
+          <div class="variable-btns" style="margin-top:8px;"><button class="btn btn-variable btn-sm" data-target="fu-day3-template" data-var="{{name}}">+ Name</button><button class="btn btn-variable btn-sm" data-target="fu-day3-template" data-var="{{course}}">+ Course</button></div>
+          <textarea id="fu-day3-template" class="template-textarea" rows="3">Hi {{name}}, this is our final message about {{course}}. If you'd like to connect, just reply here or call us directly. Wishing you the best! 🙏</textarea></div>
+        <button class="btn btn-outline" id="btn-save-followups" style="margin-top:10px;width:100%;">Save Follow-up Templates</button>
+      </div>
+    </section>
+
+    <!-- SCHEDULER (Phase 4) -->
+    <section class="card" id="section-scheduler">
+      <div class="card-title followup-toggle" id="schedule-toggle">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Schedule Campaign <span class="followup-chevron" id="schedule-chevron">▶</span>
+      </div>
+      <div class="followup-body hidden" id="schedule-body">
+        <label class="checkbox-row"><input type="checkbox" id="chk-schedule-later"><span>Schedule this campaign for later</span></label>
+        <div class="hidden" id="schedule-fields" style="margin-top:10px;">
+          <div class="delay-grid">
+            <div class="delay-field"><label>Date</label><input type="date" id="schedule-date" class="input"></div>
+            <div class="delay-field"><label>Time</label><input type="time" id="schedule-time" class="input" value="10:00"></div>
+          </div>
+          <p class="helper-text" style="margin-top:6px;">Your local time (auto-detected)</p>
+          <button class="btn btn-outline btn-sm" id="btn-schedule-campaign" style="margin-top:8px;width:100%;">⏰ Schedule Campaign</button>
+        </div>
+        <div class="error-msg hidden" id="schedule-error" style="margin-top:8px;"></div>
+        <div class="completion-msg hidden" id="schedule-success" style="margin-top:8px;"></div>
+        <div id="scheduled-list" style="margin-top:12px;"></div>
+      </div>
+    </section>
+
+    <!-- DELAY SETTINGS -->
+    <section class="card" id="section-delay">
+      <h2 class="card-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Delay Settings</h2>
+      <div class="delay-grid">
+        <div class="delay-field"><label for="delay-fixed">Fixed Delay (seconds)</label><input type="number" id="delay-fixed" class="input" value="10" min="5" step="1"></div>
+        <div class="delay-field"><label for="delay-jitter">Random Jitter (seconds)</label><input type="number" id="delay-jitter" class="input" value="3" min="0" step="1"></div>
+      </div>
+      <p class="helper-text" id="delay-helper">Each message will wait <strong>10 ± 3</strong> seconds</p>
+    </section>
+
+    <!-- CAMPAIGN CONTROLS -->
+    <section class="card" id="section-controls">
+      <h2 class="card-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Campaign Controls</h2>
+      <div class="current-contact hidden" id="current-contact"><span>Now sending to: <strong id="current-contact-name">—</strong></span></div>
+      <div class="break-banner hidden" id="break-banner"><div class="break-banner-inner"><span>⏸ Taking a short break…</span></div><span class="break-countdown" id="break-countdown">3:00</span></div>
+      <div class="error-msg hidden" id="campaign-error"><span id="campaign-error-text"></span></div>
+      <button class="btn btn-start" id="btn-start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start Campaign</button>
+      <button class="btn btn-stop hidden" id="btn-stop"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop Campaign</button>
+      <div class="progress-container hidden" id="progress-container"><div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div><p class="progress-text" id="progress-text">0%</p></div>
+      <div class="stats-row hidden" id="stats-row">
+        <div class="stat"><span class="stat-value stat-sent" id="stat-sent">0</span><span class="stat-label">Sent</span></div>
+        <div class="stat-separator"></div>
+        <div class="stat"><span class="stat-value stat-pending" id="stat-pending">0</span><span class="stat-label">Pending</span></div>
+        <div class="stat-separator"></div>
+        <div class="stat"><span class="stat-value stat-failed" id="stat-failed">0</span><span class="stat-label">Failed</span></div>
+      </div>
+      <div class="completion-msg hidden" id="completion-msg"><span id="completion-text"></span></div>
+    </section>
+  </div>
+
+  <!-- ═══════════ LEADS TAB ═══════════ -->
+  <div class="tab-panel" id="tab-leads" role="tabpanel">
+    <section class="card">
+      <div class="pipeline-bar" id="pipeline-bar"></div>
+      <div class="leads-toolbar">
+        <div class="leads-search-wrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" class="leads-search" id="leads-search-input" placeholder="Search by name, phone, or course…"></div>
+        <select class="leads-sort" id="leads-sort-select"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="name">Name A-Z</option><option value="status">Status</option><option value="tag">Tag (Hot first)</option></select>
+      </div>
+      <div class="tag-filters" id="tag-filters">
+        <button class="tag-pill active" data-tag="all">All</button>
+        <button class="tag-pill tag-pill--hot" data-tag="hot">🔥 Hot</button>
+        <button class="tag-pill tag-pill--warm" data-tag="warm">☀️ Warm</button>
+        <button class="tag-pill tag-pill--cold" data-tag="cold">❄️ Cold</button>
+      </div>
+      <div class="leads-header">
+        <h2 class="card-title" style="margin-bottom:0">All Leads <span class="badge badge-info" id="leads-total-count">0</span></h2>
+        <button class="btn btn-outline btn-sm" id="btn-export-leads">📥 Export Leads</button>
+      </div>
+      <div class="leads-table-wrap"><table class="data-table" id="leads-table"><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Course</th><th>Status</th><th>Tag</th><th>Activity</th><th>Actions</th></tr></thead><tbody id="leads-tbody"></tbody></table></div>
+      <div class="leads-empty-state hidden" id="leads-empty"><p>No leads loaded yet.<br>Upload contacts in the Campaign tab.</p></div>
+    </section>
+  </div>
+
+  <!-- ═══════════ DASHBOARD TAB ═══════════ -->
+  <div class="tab-panel" id="tab-dashboard" role="tabpanel">
+    <section class="card">
+      <div class="dash-toolbar">
+        <select class="dash-date-filter" id="dash-date-filter"><option value="today">Today</option><option value="7d" selected>Last 7 Days</option><option value="30d">Last 30 Days</option><option value="all">All Time</option></select>
+        <div class="dash-meta"><span>Updated <span id="dash-last-updated">—</span></span><button class="dash-refresh-btn" id="dash-refresh-btn">↻ Refresh</button></div>
+      </div>
+
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <div class="chart-section">
+        <div class="chart-title">Messages Sent — Last 7 Days
+          <div class="chart-legend"><span><span class="chart-legend-dot chart-legend-dot--sent"></span>Sent</span><span><span class="chart-legend-dot chart-legend-dot--replied"></span>Replied</span></div>
+        </div>
+        <div id="bar-chart-container"></div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Lead Conversion Funnel</div>
+        <div id="funnel-container"></div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Follow-up Effectiveness</div>
+        <div class="fu-stats-row" id="fu-stats-container"></div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Campaign Performance</div>
+        <div class="dash-table-wrap">
+          <table class="data-table"><thead><tr><th>Campaign</th><th>Date</th><th>Sent</th><th>Replied</th><th>Rate</th><th>Status</th></tr></thead><tbody id="dash-campaign-tbody"></tbody></table>
+        </div>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-title">Errors &amp; Retries</div>
+        <div class="error-stats-row" id="error-stats-container"></div>
+      </div>
+
+      <button class="btn btn-outline dash-export-btn" id="btn-export-report">📊 Export Dashboard Report (.xlsx)</button>
+    </section>
+  </div>
+
+  <!-- ═══════════ TEMPLATES TAB ═══════════ -->
+  <div class="tab-panel" id="tab-templates" role="tabpanel">
+    <section class="card">
+      <div class="leads-header" style="margin-bottom:12px;">
+        <h2 class="card-title" style="margin-bottom:0">Template Library</h2>
+        <button class="btn btn-outline btn-sm" id="btn-new-template">+ New Template</button>
+      </div>
+
+      <!-- Editor Panel -->
+      <div class="tpl-editor-panel hidden" id="tpl-editor-panel">
+        <h3 class="tpl-editor-title" id="tpl-editor-title">New Template</h3>
+        <div class="delay-grid" style="margin-bottom:8px;">
+          <div class="delay-field"><label>Name</label><input type="text" id="tpl-editor-name" class="input" placeholder="Template name…"></div>
+          <div class="delay-field"><label>Category</label><select id="tpl-editor-category" class="input"><option value="initial">Initial</option><option value="followup">Follow-up</option><option value="reminder">Reminder</option><option value="custom">Custom</option></select></div>
+        </div>
+        <div class="variable-btns"><button class="btn btn-variable btn-sm tpl-var-btn" data-var="{{name}}">+ Name</button><button class="btn btn-variable btn-sm tpl-var-btn" data-var="{{course}}">+ Course</button><button class="btn btn-variable btn-sm tpl-var-btn" data-var="{{city}}">+ City</button></div>
+        <textarea id="tpl-editor-body" class="template-textarea" rows="4" placeholder="Message body with {{variables}}…"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <span class="helper-text" id="tpl-char-count">0 / 4096</span>
+          <div style="display:flex;gap:6px;"><button class="btn btn-ghost btn-sm" id="btn-cancel-template">Cancel</button><button class="btn btn-outline btn-sm" id="btn-save-template">Save Template</button></div>
+        </div>
+      </div>
+
+      <div id="template-grid"></div>
+
+      <div style="margin-top:16px;">
+        <h3 style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">🏆 Best Performing Templates</h3>
+        <div class="dash-table-wrap">
+          <table class="data-table"><thead><tr><th>#</th><th>Name</th><th>Sent</th><th>Replies</th><th>Rate</th></tr></thead><tbody id="tpl-leaderboard-tbody"></tbody></table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══════════ SETTINGS TAB ═══════════ -->
+  <div class="tab-panel" id="tab-settings" role="tabpanel">
+    <section class="card">
+      <h2 class="card-title">⚙️ Settings</h2>
+
+      <!-- Sending Limits -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Sending Limits</h3>
+        <div class="delay-grid">
+          <div class="delay-field"><label>Daily message limit</label><input type="number" id="set-daily-limit" class="input" value="150" min="1"></div>
+          <div class="delay-field"><label>Break after X messages</label><input type="number" id="set-break-after" class="input" value="30" min="5"></div>
+        </div>
+        <div class="delay-grid" style="margin-top:8px;">
+          <div class="delay-field"><label>Break duration (minutes)</label><input type="number" id="set-break-duration" class="input" value="3" min="1"></div>
+        </div>
+      </div>
+
+      <!-- Account Protection -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Account Protection</h3>
+        <label class="checkbox-row"><input type="checkbox" id="set-enable-jitter" checked><span>Enable random jitter</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="set-enable-typing" checked><span>Enable typing simulation (DOM mode)</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="set-enable-breaks" checked><span>Enable break intervals</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="set-ban-warning" checked><span>Show warning if daily limit exceeded</span></label>
+      </div>
+
+      <!-- Error & Retry Handling -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Error & Retry Handling</h3>
+        <div class="delay-grid">
+          <div class="delay-field"><label>Max retry attempts</label><input type="number" id="set-max-retries" class="input" value="3" min="0" max="10"></div>
+          <div class="delay-field"><label>Retry interval multiplier (mins)</label><input type="number" id="set-retry-interval" class="input" value="5" min="1"></div>
+        </div>
+        <p class="helper-text" style="margin-top:6px;">If sending fails (e.g., chat loading timeout), WAuto will retry with exponential back-off.</p>
+      </div>
+
+      <!-- Notifications -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Notifications</h3>
+        <label class="checkbox-row"><input type="checkbox" id="set-notif-hot" checked><span>Notify on hot lead reply</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="set-notif-complete" checked><span>Notify when campaign completes</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="set-notif-scheduled" checked><span>Notify when scheduled campaign starts</span></label>
+      </div>
+
+      <!-- Data Management -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">Data Management</h3>
+        <div class="settings-actions">
+          <button class="btn btn-outline btn-sm" id="btn-export-backup">📦 Export All Data (JSON)</button>
+          <label class="btn btn-outline btn-sm" style="cursor:pointer;"><input type="file" id="file-import-backup" accept=".json" hidden>📥 Import Backup</label>
+          <button class="btn btn-outline btn-sm" id="btn-clear-history">🗑 Clear Send History</button>
+          <button class="btn btn-danger btn-sm" id="btn-reset-all">⚠️ Reset All Data</button>
+        </div>
+        <div class="reset-confirm hidden" id="reset-confirm">
+          <p style="font-size:11px;color:var(--red-500);margin-bottom:6px;">Type <strong>RESET</strong> to confirm:</p>
+          <input type="text" id="reset-confirm-input" class="input" placeholder="Type RESET…" style="margin-bottom:6px;">
+          <button class="btn btn-danger btn-sm" id="btn-confirm-reset">Confirm Reset</button>
+        </div>
+      </div>
+
+      <button class="btn btn-outline" id="btn-save-settings" style="width:100%;margin-top:14px;">💾 Save Settings</button>
+
+      <!-- About -->
+      <div class="settings-section" style="margin-top:16px;border-top:1px solid var(--navy-600);padding-top:14px;">
+        <p style="font-size:11px;color:var(--text-muted);">WAuto Pro v4.0.0 · IT Training Lead Automation</p>
+        <p style="font-size:10px;color:var(--text-muted);margin-top:4px;">This tool interacts with WhatsApp Web. Use responsibly and in compliance with WhatsApp's terms of service.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../libs/xlsx.full.min.js"></script>
+  <script src="../libs/dexie.min.js"></script>
+  <script src="../libs/db.js"></script>
+  <script src="popup.js"></script>
+  <script src="leads.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="scheduler.js"></script>
+  <script src="templates.js"></script>
+</body>
+</html>

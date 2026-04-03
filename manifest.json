@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "WAuto Pro",
+  "version": "4.0.0",
+  "description": "WhatsApp Lead Outreach Tool for IT Training",
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": ["storage", "tabs", "scripting", "notifications", "alarms"],
+  "host_permissions": [
+    "https://wa.me/*",
+    "https://web.whatsapp.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content/reply-monitor.js", "content/whatsapp.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["libs/dexie.min.js", "libs/db.js"],
+      "matches": ["https://web.whatsapp.com/*"]
+    }
+  ],
+  "icons": {
+    "128": "icons/icon128.png"
+  }
+}
