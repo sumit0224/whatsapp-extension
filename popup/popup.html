@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=560">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WAuto Pro — WhatsApp Outreach</title>
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="leads.css">
@@ -78,6 +78,22 @@
           <label>Message</label>
           <textarea id="quicksend-message" class="template-textarea" rows="3" placeholder="Type your quick message here…"></textarea>
         </div>
+        <div class="media-composer">
+          <div class="media-toolbar">
+            <button class="btn btn-ghost btn-sm media-attach-btn" id="btn-quicksend-media" type="button">📎 Add Media</button>
+            <span class="helper-text">Images/videos up to 16MB</span>
+          </div>
+          <input type="file" id="quicksend-media-input" accept=".jpg,.jpeg,.png,.gif,.mp4,.webm,.mov,image/*,video/*" hidden>
+          <div class="media-drop-zone" id="quicksend-media-drop">Drop image/video here (optional)</div>
+          <div class="media-preview hidden" id="quicksend-media-preview">
+            <img id="quicksend-media-image" class="media-thumb hidden" alt="Quick media preview">
+            <video id="quicksend-media-video" class="media-thumb hidden" muted playsinline preload="metadata"></video>
+            <div class="media-meta">
+              <span id="quicksend-media-name">media</span>
+              <button class="btn btn-ghost btn-sm" id="btn-quicksend-media-remove" type="button">Remove</button>
+            </div>
+          </div>
+        </div>
         <div class="error-msg hidden" id="quicksend-error" style="margin-bottom:8px;"></div>
         <div class="completion-msg hidden" id="quicksend-status" style="margin-bottom:8px;"></div>
         <button class="btn btn-outline" id="btn-quicksend-action" style="width:100%;">🚀 Send to <span id="quicksend-count">0</span> Numbers</button>
@@ -124,6 +140,22 @@
           <button class="btn btn-variable" data-var="{{city}}">+ City</button>
         </div>
         <textarea id="template-input" class="template-textarea" placeholder="Type your message template here…" rows="4"></textarea>
+        <div class="media-composer" style="margin-top:8px;">
+          <div class="media-toolbar">
+            <button class="btn btn-ghost btn-sm media-attach-btn" id="btn-campaign-media" type="button">📎 Add Media</button>
+            <span class="helper-text">Attach one image/video to each message</span>
+          </div>
+          <input type="file" id="campaign-media-input" accept=".jpg,.jpeg,.png,.gif,.mp4,.webm,.mov,image/*,video/*" hidden>
+          <div class="media-drop-zone" id="campaign-media-drop">Drop image/video here (optional)</div>
+          <div class="media-preview hidden" id="campaign-media-preview">
+            <img id="campaign-media-image" class="media-thumb hidden" alt="Campaign media preview">
+            <video id="campaign-media-video" class="media-thumb hidden" muted playsinline preload="metadata"></video>
+            <div class="media-meta">
+              <span id="campaign-media-name">media</span>
+              <button class="btn btn-ghost btn-sm" id="btn-campaign-media-remove" type="button">Remove</button>
+            </div>
+          </div>
+        </div>
         <div class="preview-box" id="preview-box">
           <p class="preview-label">Live Preview</p>
           <p class="preview-message" id="preview-message">Your personalised message will appear here…</p>

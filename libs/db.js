@@ -26,6 +26,17 @@ db.version(2).stores({
   templates: '++id, category, usageCount, createdAt, updatedAt',
 });
 
+// Version 3 — Campaign-scoped recipient snapshots
+db.version(3).stores({
+  leads: '++id, &phone, name, course, city, status, tag, campaignId, campaignDbId, [campaignId+status], sentAt, repliedAt, followUpDay, createdAt, updatedAt',
+  campaigns: '++id, name, status, createdAt, completedAt',
+  messages: '++id, leadId, campaignId, direction, sentAt, type, templateId',
+  followUpQueue: '++id, leadId, campaignId, day, scheduledFor, status',
+  scheduledCampaigns: '++id, status, scheduledFor, createdAt',
+  retryQueue: '++id, leadId, status, nextRetryAt, campaignId',
+  templates: '++id, category, usageCount, createdAt, updatedAt',
+});
+
 // ═══════════════════════════════════════
 //  LEADS CRUD
 // ═══════════════════════════════════════
@@ -34,7 +45,7 @@ async function addLead(lead) {
   return db.leads.add({
     phone: lead.phone, name: lead.name || '', course: lead.course || '', city: lead.city || '',
     customFields: lead.customFields || {}, status: lead.status || 'pending', tag: lead.tag || null,
-    campaignId: lead.campaignId || null, sentAt: lead.sentAt || null, repliedAt: lead.repliedAt || null,
+    campaignId: lead.campaignId || null, campaignDbId: lead.campaignDbId || null, sentAt: lead.sentAt || null, repliedAt: lead.repliedAt || null,
     followUpDay: lead.followUpDay || 0, followUpSentAt: lead.followUpSentAt || null,
     notes: lead.notes || '', createdAt: lead.createdAt || now, updatedAt: now,
   });
@@ -45,7 +56,7 @@ async function addLeadBulk(leadsArr) {
   const prepared = leadsArr.map((l) => ({
     phone: l.phone, name: l.name || '', course: l.course || '', city: l.city || '',
     customFields: l.customFields || {}, status: l.status || 'pending', tag: l.tag || null,
-    campaignId: l.campaignId || null, sentAt: l.sentAt || null, repliedAt: l.repliedAt || null,
+    campaignId: l.campaignId || null, campaignDbId: l.campaignDbId || null, sentAt: l.sentAt || null, repliedAt: l.repliedAt || null,
     followUpDay: l.followUpDay || 0, followUpSentAt: l.followUpSentAt || null,
     notes: l.notes || '', createdAt: l.createdAt || now, updatedAt: now,
   }));
@@ -61,12 +72,22 @@ async function getLead(phone) { return db.leads.where('phone').equals(phone).fir
 async function getLeadById(id) { return db.leads.get(id); }
 
 async function getAllLeads(filters = {}) {
+  const hasStatus = filters.status !== undefined && filters.status !== null && filters.status !== '';
+  const hasTag = filters.tag !== undefined && filters.tag !== null && filters.tag !== '';
+  const hasCampaignId = filters.campaignId !== undefined && filters.campaignId !== null && filters.campaignId !== '';
+  const hasCampaignDbId = filters.campaignDbId !== undefined && filters.campaignDbId !== null && filters.campaignDbId !== '';
+
   let collection = db.leads.toCollection();
-  if (filters.status) collection = db.leads.where('status').equals(filters.status);
-  if (filters.tag) collection = db.leads.where('tag').equals(filters.tag);
-  if (filters.campaignId) collection = db.leads.where('campaignId').equals(filters.campaignId);
+  if (hasCampaignId && hasStatus) collection = db.leads.where('[campaignId+status]').equals([filters.campaignId, filters.status]);
+  else if (hasCampaignId) collection = db.leads.where('campaignId').equals(filters.campaignId);
+  else if (hasStatus) collection = db.leads.where('status').equals(filters.status);
+  else if (hasTag) collection = db.leads.where('tag').equals(filters.tag);
 
   let results = await collection.toArray();
+  if (hasStatus) results = results.filter((l) => l.status === filters.status);
+  if (hasTag) results = results.filter((l) => l.tag === filters.tag);
+  if (hasCampaignId) results = results.filter((l) => l.campaignId === filters.campaignId);
+  if (hasCampaignDbId) results = results.filter((l) => l.campaignDbId === filters.campaignDbId);
   if (filters.search) {
     const q = filters.search.toLowerCase();
     results = results.filter((l) =>
@@ -91,8 +112,9 @@ async function getAllLeads(filters = {}) {
   return results;
 }
 
-async function getLeadCounts() {
-  const all = await db.leads.toArray();
+async function getLeadCounts(filters = {}) {
+  const hasFilters = Object.keys(filters || {}).length > 0;
+  const all = hasFilters ? await getAllLeads(filters) : await db.leads.toArray();
   const c = { total: all.length, pending: 0, sent: 0, replied: 0, failed: 0, converted: 0, closed: 0, hot: 0, warm: 0, cold: 0 };
   all.forEach((l) => { if (c[l.status] !== undefined) c[l.status]++; if (l.tag && c[l.tag] !== undefined) c[l.tag]++; });
   return c;
@@ -125,6 +147,7 @@ async function getAllMessages() { return db.messages.toArray(); }
 async function addCampaign(campaign) {
   return db.campaigns.add({
     name: campaign.name || 'Campaign ' + Date.now(), status: campaign.status || 'active',
+    campaignId: campaign.campaignId || null,
     template: campaign.template || '', totalContacts: campaign.totalContacts || 0,
     sent: campaign.sent || 0, failed: campaign.failed || 0, replied: campaign.replied || 0,
     converted: campaign.converted || 0, createdAt: Date.now(), completedAt: null,
@@ -368,7 +391,7 @@ async function getLeadsForExport(filters = {}) {
   const campaigns = await getAllCampaigns();
   const campaignMap = {};
   campaigns.forEach((c) => { campaignMap[c.id] = c.name; });
-  return leads.map((l) => ({ ...l, campaignName: campaignMap[l.campaignId] || '' }));
+  return leads.map((l) => ({ ...l, campaignName: campaignMap[l.campaignDbId || l.campaignId] || '' }));
 }
 
 // ═══════════════════════════════════════

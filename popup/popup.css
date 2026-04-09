@@ -7,6 +7,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  animation: none !important;
+  transition: none !important;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -43,11 +45,17 @@
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 2px 12px rgba(0,0,0,0.25);
-  --transition: 0.2s ease;
+  --transition: 0.14s ease-out;
+}
+
+html,
+body {
+  width: 560px;
+  min-width: 560px;
+  max-width: 560px;
 }
 
 body {
-  width: 560px;
   min-height: 200px;
   max-height: 640px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -56,7 +64,74 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+/* ── MEDIA COMPOSER ── */
+.media-composer {
+  border: 1px dashed var(--navy-500);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  background: rgba(15, 31, 56, 0.5);
+}
+
+.media-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.media-attach-btn {
+  white-space: nowrap;
+}
+
+.media-drop-zone {
+  margin-top: 8px;
+  border: 1px dashed var(--navy-500);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 11px;
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.media-drop-zone.drag-over {
+  border-color: var(--emerald-500);
+  background: var(--emerald-glow);
+  color: var(--emerald-400);
+}
+
+.media-preview {
+  margin-top: 8px;
+  border: 1px solid var(--navy-500);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  animation: none;
+}
+
+.media-thumb {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #000;
+}
+
+.media-meta {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 620px) {
+  .tab-panel { padding: 10px 12px 14px; }
 }
 
 /* ── HEADER ── */
@@ -128,7 +203,7 @@ body {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: color var(--transition), border-color var(--transition);
 }
 
 .tab-btn:hover {
@@ -156,7 +231,7 @@ body {
 
 .tab-panel.active {
   display: block;
-  animation: fadeIn 0.25s ease;
+  animation: none;
 }
 
 @keyframes fadeIn {
@@ -176,7 +251,7 @@ body {
   margin-bottom: 12px;
   font-size: 12px;
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
 }
 
 .session-banner-content {
@@ -200,8 +275,8 @@ body {
 
 .session-banner--connected .session-dot {
   background: var(--emerald-500);
-  box-shadow: 0 0 6px var(--emerald-500);
-  animation: pulse-dot 2s infinite;
+  box-shadow: none;
+  animation: none;
 }
 
 .session-banner--warning {
@@ -223,7 +298,7 @@ body {
 
 .session-banner--error .session-dot {
   background: var(--red-500);
-  animation: pulse-dot 1.5s infinite;
+  animation: none;
 }
 
 .session-banner--checking {
@@ -234,7 +309,7 @@ body {
 
 .session-banner--checking .session-dot {
   background: var(--blue-500);
-  animation: pulse-dot 1s infinite;
+  animation: none;
 }
 
 @keyframes pulse-dot {
@@ -252,7 +327,7 @@ body {
   padding: 4px 10px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition);
   white-space: nowrap;
 }
 
@@ -279,7 +354,7 @@ body {
   border: 1px solid var(--navy-600);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: border-color var(--transition), background-color var(--transition);
 }
 
 .mode-option:hover {
@@ -297,7 +372,7 @@ body {
   border: 2px solid var(--navy-500);
   flex-shrink: 0;
   position: relative;
-  transition: all var(--transition);
+  transition: border-color var(--transition);
 }
 
 .mode-option input[type="radio"]:checked ~ .mode-radio {
@@ -351,12 +426,12 @@ body {
   color: var(--blue-500);
   font-size: 12px;
   margin-bottom: 12px;
-  animation: fadeIn 0.3s ease;
+  animation: none;
 }
 
 .current-contact svg {
   flex-shrink: 0;
-  animation: sending-pulse 1.5s ease infinite;
+  animation: none;
 }
 
 @keyframes sending-pulse {
@@ -383,7 +458,7 @@ body {
   font-size: 12px;
   font-weight: 500;
   margin-bottom: 12px;
-  animation: fadeIn 0.3s ease;
+  animation: none;
 }
 
 .break-banner-inner {
@@ -393,7 +468,7 @@ body {
 }
 
 .break-banner-inner svg {
-  animation: pause-blink 1.5s ease infinite;
+  animation: none;
 }
 
 @keyframes pause-blink {
@@ -423,7 +498,7 @@ body {
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
-  transition: all var(--transition);
+  transition: border-color var(--transition), background-color var(--transition);
 }
 
 .checkbox-row:hover {
@@ -473,7 +548,7 @@ body {
   padding: 28px 20px;
   text-align: center;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: border-color var(--transition), background-color var(--transition);
   background: var(--navy-900);
 }
 
@@ -484,7 +559,7 @@ body {
 }
 
 .drop-zone.drag-over {
-  transform: scale(1.01);
+  transform: none;
 }
 
 .drop-icon {
@@ -672,7 +747,7 @@ body {
   background: var(--navy-700);
   color: var(--emerald-400);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
   font-family: inherit;
   font-weight: 500;
 }
@@ -797,12 +872,12 @@ body {
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
   outline: none;
 }
 
 .btn:active {
-  transform: scale(0.98);
+  transform: none;
 }
 
 .btn-start {
@@ -816,8 +891,7 @@ body {
 }
 
 .btn-start:hover {
-  box-shadow: 0 6px 24px rgba(37, 211, 102, 0.4);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(37, 211, 102, 0.3);
 }
 
 .btn-start:disabled {
@@ -838,8 +912,7 @@ body {
 }
 
 .btn-stop:hover {
-  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
 }
 
 .btn-ghost {
@@ -904,7 +977,8 @@ body {
     rgba(255,255,255,0.2) 50%,
     transparent 100%
   );
-  animation: shimmer 2s infinite;
+  animation: none;
+  opacity: 0.25;
 }
 
 @keyframes shimmer {
@@ -1151,7 +1225,23 @@ body::-webkit-scrollbar-thumb {
   background: var(--navy-900);
   border: 1px solid var(--navy-600);
   border-radius: var(--radius-sm);
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition-duration: 0s !important;
+  }
+}
+
+/* Strong anti-jitter mode for tabs where users reported UI shake. */
+body[data-active-tab="campaign"] #tab-campaign *,
+body[data-active-tab="dashboard"] #tab-dashboard *,
+body[data-active-tab="settings"] #tab-settings * {
+  animation: none !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }
 
 .tpl-card:hover { border-color: var(--navy-400); }

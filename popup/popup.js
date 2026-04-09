@@ -68,11 +68,45 @@
   const quicksendStatus = $('#quicksend-status');
   const btnQuicksendAction = $('#btn-quicksend-action');
   const quicksendCount = $('#quicksend-count');
+  const btnQuicksendMedia = $('#btn-quicksend-media');
+  const quicksendMediaInput = $('#quicksend-media-input');
+  const quicksendMediaDrop = $('#quicksend-media-drop');
+  const quicksendMediaPreview = $('#quicksend-media-preview');
+  const quicksendMediaImage = $('#quicksend-media-image');
+  const quicksendMediaVideo = $('#quicksend-media-video');
+  const quicksendMediaName = $('#quicksend-media-name');
+  const btnQuicksendMediaRemove = $('#btn-quicksend-media-remove');
+
+  const btnCampaignMedia = $('#btn-campaign-media');
+  const campaignMediaInput = $('#campaign-media-input');
+  const campaignMediaDrop = $('#campaign-media-drop');
+  const campaignMediaPreview = $('#campaign-media-preview');
+  const campaignMediaImage = $('#campaign-media-image');
+  const campaignMediaVideo = $('#campaign-media-video');
+  const campaignMediaName = $('#campaign-media-name');
+  const btnCampaignMediaRemove = $('#btn-campaign-media-remove');
 
   // state
   let parsedContacts = [];
   let sessionCheckInterval = null;
   let breakCountdownInterval = null;
+  let quickSendSafetyTimer = null;
+  let quickSendMediaFile = null;
+  let quickSendMediaUrl = null;
+  let campaignMediaFile = null;
+  let campaignMediaUrl = null;
+  let lastSessionStatus = null;
+
+  const MAX_MEDIA_SIZE_BYTES = 16 * 1024 * 1024;
+  const ALLOWED_MEDIA_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'mp4', 'webm', 'mov']);
+  const ALLOWED_MEDIA_MIME_PREFIX = ['image/', 'video/'];
+
+  function setActiveTabState(target) {
+    const tabName = target || 'campaign';
+    document.body.setAttribute('data-active-tab', tabName);
+    const scroller = document.scrollingElement || document.documentElement || document.body;
+    if (scroller) scroller.scrollTop = 0;
+  }
 
   // ═══════════════════════════════════════
   //  TAB SWITCHING (with persistence)
@@ -80,14 +114,20 @@
   tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.tab;
+      setActiveTabState(target);
       tabBtns.forEach((b) => { b.classList.toggle('active', b === btn); b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
       tabPanels.forEach((p) => { p.classList.toggle('active', p.id === `tab-${target}`); });
       chrome.storage.local.set({ activeTab: target });
 
       if (target === 'leads' && window.WALeads) window.WALeads.init();
       if (target === 'dashboard' && window.WADashboard) window.WADashboard.init();
+      if (target !== 'dashboard' && window.WADashboard) window.WADashboard.stop();
       if (target === 'templates' && window.WATemplates) window.WATemplates.init();
       if (target === 'campaign' && window.WAScheduler) window.WAScheduler.refresh();
+
+      // Reduce background polling/jank on non-campaign tabs.
+      if (target === 'campaign' && modeDom.checked) startSessionCheck();
+      else stopSessionCheck();
     });
   });
 
@@ -95,6 +135,8 @@
   //  SESSION BANNER
   // ═══════════════════════════════════════
   function updateSessionBanner(status) {
+    if (status === lastSessionStatus) return;
+    lastSessionStatus = status;
     sessionBanner.className = 'session-banner';
     btnOpenWa.classList.add('hidden');
     switch (status) {
@@ -110,7 +152,11 @@
 
   btnOpenWa.addEventListener('click', async () => { try { await sendMsg({ action: 'OPEN_WHATSAPP_TAB' }); updateSessionBanner('loading'); setTimeout(checkSession, 6000); } catch (e) { /* */ } });
 
-  function startSessionCheck() { checkSession(); sessionCheckInterval = setInterval(checkSession, 10000); }
+  function startSessionCheck() {
+    stopSessionCheck();
+    checkSession();
+    sessionCheckInterval = setInterval(checkSession, 10000);
+  }
   function stopSessionCheck() { if (sessionCheckInterval) { clearInterval(sessionCheckInterval); sessionCheckInterval = null; } }
 
   // ═══════════════════════════════════════
@@ -313,6 +359,167 @@
   delayFixed.addEventListener('blur', () => { if (parseInt(delayFixed.value, 10) < 5) { delayFixed.value = 5; updateDelayHelper(); } });
 
   // ═══════════════════════════════════════
+  //  MEDIA PICKERS (Campaign + Quick Send)
+  // ═══════════════════════════════════════
+  function isAllowedMediaFile(file) {
+    if (!file) return false;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const mimeOk = ALLOWED_MEDIA_MIME_PREFIX.some((p) => (file.type || '').startsWith(p));
+    const extOk = ALLOWED_MEDIA_EXTS.has(ext);
+    return mimeOk || extOk;
+  }
+
+  function getMediaKind(file) {
+    const t = file && file.type ? file.type.toLowerCase() : '';
+    if (t.startsWith('video/')) return 'video';
+    if (t.startsWith('image/')) return 'image';
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    return ['mp4', 'webm', 'mov'].includes(ext) ? 'video' : 'image';
+  }
+
+  function showQuickSendError(msg) {
+    if (!quicksendError) return;
+    quicksendError.textContent = msg;
+    quicksendError.classList.remove('hidden');
+  }
+
+  function showCampaignError(msg) {
+    if (!campaignErrorText || !campaignError) return;
+    campaignErrorText.textContent = msg;
+    campaignError.classList.remove('hidden');
+  }
+
+  function clearPreviewMediaElements(imageEl, videoEl) {
+    if (imageEl) { imageEl.classList.add('hidden'); imageEl.removeAttribute('src'); }
+    if (videoEl) {
+      videoEl.pause();
+      videoEl.classList.add('hidden');
+      videoEl.removeAttribute('src');
+      try { videoEl.load(); } catch (e) { /* */ }
+    }
+  }
+
+  function setMediaPreview(scope, file, objectUrl) {
+    const isVideo = getMediaKind(file) === 'video';
+    const isQuick = scope === 'quick';
+    const preview = isQuick ? quicksendMediaPreview : campaignMediaPreview;
+    const imageEl = isQuick ? quicksendMediaImage : campaignMediaImage;
+    const videoEl = isQuick ? quicksendMediaVideo : campaignMediaVideo;
+    const nameEl = isQuick ? quicksendMediaName : campaignMediaName;
+    if (!preview || !imageEl || !videoEl || !nameEl) return;
+
+    clearPreviewMediaElements(imageEl, videoEl);
+    if (isVideo) {
+      videoEl.src = objectUrl;
+      videoEl.classList.remove('hidden');
+    } else {
+      imageEl.src = objectUrl;
+      imageEl.classList.remove('hidden');
+    }
+    nameEl.textContent = `${file.name} • ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+    preview.classList.remove('hidden');
+  }
+
+  function clearSelectedMedia(scope) {
+    const isQuick = scope === 'quick';
+    if (isQuick) {
+      if (quickSendMediaUrl) URL.revokeObjectURL(quickSendMediaUrl);
+      quickSendMediaUrl = null;
+      quickSendMediaFile = null;
+      if (quicksendMediaPreview) quicksendMediaPreview.classList.add('hidden');
+      clearPreviewMediaElements(quicksendMediaImage, quicksendMediaVideo);
+      if (quicksendMediaName) quicksendMediaName.textContent = 'media';
+      if (quicksendMediaInput) quicksendMediaInput.value = '';
+    } else {
+      if (campaignMediaUrl) URL.revokeObjectURL(campaignMediaUrl);
+      campaignMediaUrl = null;
+      campaignMediaFile = null;
+      if (campaignMediaPreview) campaignMediaPreview.classList.add('hidden');
+      clearPreviewMediaElements(campaignMediaImage, campaignMediaVideo);
+      if (campaignMediaName) campaignMediaName.textContent = 'media';
+      if (campaignMediaInput) campaignMediaInput.value = '';
+    }
+  }
+
+  function setSelectedMedia(scope, file) {
+    if (!file) return false;
+    if (!isAllowedMediaFile(file)) {
+      const msg = 'Unsupported file format. Use JPG, JPEG, PNG, GIF, MP4, WEBM, or MOV.';
+      if (scope === 'quick') showQuickSendError(msg); else showCampaignError(msg);
+      return false;
+    }
+    if (file.size > MAX_MEDIA_SIZE_BYTES) {
+      const msg = 'File too large. Max allowed size is 16MB.';
+      if (scope === 'quick') showQuickSendError(msg); else showCampaignError(msg);
+      return false;
+    }
+
+    if (scope === 'quick') {
+      clearSelectedMedia('quick');
+      quickSendMediaFile = file;
+      quickSendMediaUrl = URL.createObjectURL(file);
+      setMediaPreview('quick', file, quickSendMediaUrl);
+    } else {
+      clearSelectedMedia('campaign');
+      campaignMediaFile = file;
+      campaignMediaUrl = URL.createObjectURL(file);
+      setMediaPreview('campaign', file, campaignMediaUrl);
+    }
+    return true;
+  }
+
+  function attachMediaDropHandlers(el, onFile) {
+    if (!el) return;
+    el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const file = e.dataTransfer && e.dataTransfer.files ? e.dataTransfer.files[0] : null;
+      if (file) onFile(file);
+    });
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('media_read_failed'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function buildMediaPayload(file) {
+    if (!file) return null;
+    const dataUrl = await fileToDataUrl(file);
+    return {
+      name: file.name,
+      type: file.type || '',
+      size: file.size || 0,
+      kind: getMediaKind(file),
+      dataUrl,
+    };
+  }
+
+  function setupMediaPickers() {
+    if (btnQuicksendMedia && quicksendMediaInput) btnQuicksendMedia.addEventListener('click', () => quicksendMediaInput.click());
+    if (btnCampaignMedia && campaignMediaInput) btnCampaignMedia.addEventListener('click', () => campaignMediaInput.click());
+
+    if (quicksendMediaInput) quicksendMediaInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) setSelectedMedia('quick', e.target.files[0]);
+    });
+    if (campaignMediaInput) campaignMediaInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) setSelectedMedia('campaign', e.target.files[0]);
+    });
+
+    if (btnQuicksendMediaRemove) btnQuicksendMediaRemove.addEventListener('click', () => clearSelectedMedia('quick'));
+    if (btnCampaignMediaRemove) btnCampaignMediaRemove.addEventListener('click', () => clearSelectedMedia('campaign'));
+
+    attachMediaDropHandlers(quicksendMediaDrop, (file) => setSelectedMedia('quick', file));
+    attachMediaDropHandlers(campaignMediaDrop, (file) => setSelectedMedia('campaign', file));
+  }
+
+  // ═══════════════════════════════════════
   //  QUICK SEND
   // ═══════════════════════════════════════
   if (quicksendToggle) quicksendToggle.addEventListener('click', () => { const o = !quicksendBody.classList.contains('hidden'); quicksendBody.classList.toggle('hidden', o); quicksendChevron.textContent = o ? '▶' : '▼'; });
@@ -320,6 +527,30 @@
   if (quicksendNumbers) quicksendNumbers.addEventListener('input', () => { quicksendCount.textContent = getQuickSendNumbers().length; });
 
   if (btnQuicksendAction) btnQuicksendAction.addEventListener('click', handleQuickSend);
+
+  function clearQuickSendSafetyTimer() {
+    if (quickSendSafetyTimer) {
+      clearTimeout(quickSendSafetyTimer);
+      quickSendSafetyTimer = null;
+    }
+  }
+
+  function resetQuickSendButton() {
+    if (!btnQuicksendAction) return;
+    btnQuicksendAction.disabled = false;
+    btnQuicksendAction.textContent = `🚀 Send to ${getQuickSendNumbers().length} Numbers`;
+  }
+
+  function startQuickSendSafetyTimer() {
+    clearQuickSendSafetyTimer();
+    quickSendSafetyTimer = setTimeout(() => {
+      resetQuickSendButton();
+      if (quicksendError) {
+        quicksendError.textContent = 'Send timed out. Please try again.';
+        quicksendError.classList.remove('hidden');
+      }
+    }, 60000);
+  }
 
   function getQuickSendNumbers() {
     if (!quicksendNumbers) return [];
@@ -336,9 +567,14 @@
     quicksendStatus.classList.add('hidden');
     const numbers = getQuickSendNumbers();
     const msg = quicksendMessage.value.trim();
+    const hasMedia = !!quickSendMediaFile;
     if (numbers.length === 0) { quicksendError.textContent = 'Please enter valid phone numbers.'; quicksendError.classList.remove('hidden'); return; }
     if (numbers.length > 50) { quicksendError.textContent = 'Maximum 50 numbers allowed.'; quicksendError.classList.remove('hidden'); return; }
-    if (!msg) { quicksendError.textContent = 'Please enter a message.'; quicksendError.classList.remove('hidden'); return; }
+    if (!msg && !hasMedia) {
+      quicksendError.textContent = 'Please enter a message or attach media.';
+      quicksendError.classList.remove('hidden');
+      return;
+    }
     
     // Check if running
     const state = await cGet('campaignState');
@@ -350,18 +586,55 @@
 
     const f = Math.max(5, parseInt(delayFixed.value, 10) || 10);
     const j = Math.max(0, parseInt(delayJitter.value, 10) || 3);
-    
+    const currentSendMode = modeDom.checked ? 'dom' : 'link';
+
+    if (hasMedia && currentSendMode === 'link') {
+      showQuickSendError('Media quick send works only in DOM mode. Switch mode to DOM.');
+      resetQuickSendButton();
+      return;
+    }
+
+    let response;
+    try {
+      btnQuicksendAction.disabled = true;
+      btnQuicksendAction.textContent = hasMedia ? '⏳ Preparing media...' : '⏳ Starting...';
+      const mediaPayload = hasMedia ? await buildMediaPayload(quickSendMediaFile) : null;
+      response = await sendMsg({
+        action: 'QUICK_SEND',
+        numbers: numbers,
+        message: msg,
+        delayFixed: f,
+        delayJitter: j,
+        sendMode: currentSendMode,
+        mediaPayload,
+      });
+    } catch (e) {
+      quicksendError.textContent = 'Could not start quick send. Please try again.';
+      quicksendError.classList.remove('hidden');
+      resetQuickSendButton();
+      clearQuickSendSafetyTimer();
+      return;
+    }
+
+    if (!response || response.status === 'busy') {
+      quicksendError.textContent = 'A send is already running. Please wait for it to finish.';
+      quicksendError.classList.remove('hidden');
+      resetQuickSendButton();
+      clearQuickSendSafetyTimer();
+      return;
+    }
+
+    if (response.status !== 'started') {
+      quicksendError.textContent = 'Could not start quick send. Please try again.';
+      quicksendError.classList.remove('hidden');
+      resetQuickSendButton();
+      clearQuickSendSafetyTimer();
+      return;
+    }
+
     btnQuicksendAction.disabled = true;
     btnQuicksendAction.textContent = '⏳ Starting...';
-
-    chrome.runtime.sendMessage({
-      action: 'QUICK_SEND',
-      numbers: numbers,
-      message: msg,
-      delayFixed: f,
-      delayJitter: j,
-      sendMode: modeDom.checked ? 'dom' : 'link'
-    });
+    startQuickSendSafetyTimer();
   }
 
   // ═══════════════════════════════════════
@@ -379,8 +652,12 @@
 
     const template = templateInput.value.trim();
     const isRotate = tplModeRotate && tplModeRotate.checked;
+    const hasCampaignMedia = !!campaignMediaFile;
 
-    if (!isRotate && !template) { showError('Please write a message template.'); return; }
+    if (!isRotate && !template && !hasCampaignMedia) {
+      showError('Please write a message template or attach media.');
+      return;
+    }
 
     let rotateTemplates = false;
     let templateIds = [];
@@ -392,28 +669,97 @@
       rotateTemplates = true;
     }
 
-    if (parsedContacts.length === 0) {
-      const counts = await DB.getLeadCounts();
-      if (counts.pending === 0) { showError('No contacts loaded. Upload a file first.'); return; }
+    const skipAM = !chkResend.checked;
+    const activeMode = modeDom.checked ? 'dom' : 'link';
+    if (hasCampaignMedia && activeMode === 'link') {
+      showError('Media campaign send works only in DOM mode. Switch mode to DOM.');
+      return;
     }
 
-    const skipAM = !chkResend.checked;
+    // Resume existing paused campaign only when no fresh upload exists
+    if (parsedContacts.length === 0) {
+      const rs = await cGet('campaignState');
+      const existing = rs.campaignState || {};
+      if (existing.campaignId) {
+        const resumeCounts = await DB.getLeadCounts({ campaignId: existing.campaignId });
+        if (resumeCounts.pending > 0) {
+          let resumeMediaPayload = null;
+          if (hasCampaignMedia) {
+            try { resumeMediaPayload = await buildMediaPayload(campaignMediaFile); }
+            catch (e) {
+              showError('Failed to read selected media file.');
+              return;
+            }
+          }
+          existing.isRunning = true;
+          existing.status = 'running';
+          existing.total = resumeCounts.total;
+          existing.sent = resumeCounts.sent;
+          existing.failed = resumeCounts.failed;
+          existing.hasMedia = hasCampaignMedia || !!existing.hasMedia;
+          await cSet({ campaignState: existing });
+          showRunningUI(existing);
+          chrome.runtime.sendMessage({
+            action: 'START_CAMPAIGN',
+            campaignId: existing.campaignId,
+            campaignDbId: existing.campaignDbId || null,
+            mediaPayload: resumeMediaPayload,
+            hasMedia: existing.hasMedia || false,
+          });
+          return;
+        }
+      }
+      showError('No contacts loaded. Upload a file first.');
+      return;
+    }
+
+    const campaignId = generateCampaignId();
+    const campaignDbId = await DB.addCampaign({
+      name: 'Campaign ' + new Date().toLocaleDateString(),
+      status: 'active',
+      campaignId,
+      template,
+      totalContacts: 0,
+    });
+
+    let snapshotCount = 0;
 
     if (parsedContacts.length > 0) {
       for (const c of parsedContacts) {
         if (!/^\+\d{10,15}$/.test(c.phone)) continue;
         if (skipAM && c._alreadyMessaged) continue;
         const ex = await DB.getLead(c.phone);
-        if (ex) { await DB.updateLead(ex.id, { status: 'pending', name: c.name || ex.name, course: c.course || ex.course, city: c.city || ex.city }); }
-        else { await DB.addLead({ phone: c.phone, name: c.name, course: c.course, city: c.city, status: 'pending' }); }
+        if (ex) {
+          await DB.updateLead(ex.id, {
+            status: 'pending',
+            name: c.name || ex.name,
+            course: c.course || ex.course,
+            city: c.city || ex.city,
+            campaignId,
+            campaignDbId,
+          });
+        } else {
+          await DB.addLead({
+            phone: c.phone,
+            name: c.name,
+            course: c.course,
+            city: c.city,
+            status: 'pending',
+            campaignId,
+            campaignDbId,
+          });
+        }
+        snapshotCount++;
       }
     }
 
-    const counts = await DB.getLeadCounts();
-    const campaignId = await DB.addCampaign({ name: 'Campaign ' + new Date().toLocaleDateString(), status: 'active', template: template, totalContacts: counts.pending });
+    if (snapshotCount === 0) {
+      await DB.updateCampaign(campaignDbId, { status: 'cancelled', totalContacts: 0, completedAt: Date.now() });
+      showError('No valid contacts to send after filters. Check numbers or resend setting.');
+      return;
+    }
 
-    const pending = await DB.getAllLeads({ status: 'pending' });
-    for (const l of pending) await DB.updateLead(l.id, { campaignId });
+    await DB.updateCampaign(campaignDbId, { totalContacts: snapshotCount, sent: 0, failed: 0 });
 
     const f = Math.max(5, parseInt(delayFixed.value, 10) || 10);
     const j = Math.max(0, parseInt(delayJitter.value, 10) || 3);
@@ -421,14 +767,23 @@
     saveFollowUpConfig();
 
     const cs = {
-      isRunning: true, status: 'running', currentIndex: 0, total: counts.pending,
-      sent: counts.sent, failed: 0, template, delayFixed: f, delayJitter: j, campaignId,
+      isRunning: true, status: 'running', currentIndex: 0, total: snapshotCount,
+      sent: 0, failed: 0, template, delayFixed: f, delayJitter: j, campaignId, campaignDbId,
+      hasMedia: hasCampaignMedia,
       rotateTemplates, templateIds, rotationIndex: 0,
     };
 
     await cSet({ campaignState: cs, savedTemplate: template, delayConfig: { fixed: f, jitter: j }, sendMode: modeDom.checked ? 'dom' : 'link' });
     showRunningUI(cs);
-    chrome.runtime.sendMessage({ action: 'START_CAMPAIGN' });
+    let mediaPayload = null;
+    if (hasCampaignMedia) {
+      try { mediaPayload = await buildMediaPayload(campaignMediaFile); }
+      catch (e) {
+        showError('Failed to read selected media file.');
+        return;
+      }
+    }
+    chrome.runtime.sendMessage({ action: 'START_CAMPAIGN', campaignId, campaignDbId, mediaPayload, hasMedia: hasCampaignMedia });
   }
 
   async function stopCampaign() {
@@ -443,7 +798,7 @@
 
   function updateProgress(s) {
     const t = s.total || 1; const sent = s.sent || 0; const f = s.failed || 0;
-    const pct = Math.round(((sent + f) / t) * 100);
+    const pct = Math.round((sent / t) * 100);
     progressBar.style.width = `${pct}%`; progressText.textContent = `${pct}%`;
     statSent.textContent = sent; statPending.textContent = Math.max(0, t - sent - f); statFailed.textContent = f;
     if (s.currentContact) { currentContactName.textContent = s.currentContact; currentContact.classList.remove('hidden'); }
@@ -478,10 +833,12 @@
     
     // Quick send progress
     if (msg.action === 'QUICK_SEND_PROGRESS') {
+      startQuickSendSafetyTimer();
       if (btnQuicksendAction) btnQuicksendAction.textContent = `⏳ Sending ${msg.sent}/${msg.total}...`;
     }
     if (msg.action === 'QUICK_SEND_COMPLETE') {
-      if (btnQuicksendAction) { btnQuicksendAction.disabled = false; btnQuicksendAction.textContent = `🚀 Send to ${getQuickSendNumbers().length} Numbers`; }
+      clearQuickSendSafetyTimer();
+      resetQuickSendButton();
       if (quicksendStatus) { quicksendStatus.textContent = `✅ Sent to ${msg.sent} numbers!`; quicksendStatus.classList.remove('hidden'); }
       if (quicksendMessage) quicksendMessage.value = '';
     }
@@ -601,10 +958,19 @@
         const btn = $(`[data-tab="${r.activeTab}"]`);
         if (btn) btn.click();
       }
+      else {
+        setActiveTabState('campaign');
+      }
 
       // Restore campaign state
       if (r.campaignState) {
         const s = r.campaignState;
+        if (s.campaignId) {
+          const scopedCounts = await DB.getLeadCounts({ campaignId: s.campaignId });
+          s.total = scopedCounts.total;
+          s.sent = scopedCounts.sent;
+          s.failed = scopedCounts.failed;
+        }
         if (s.isRunning) { showRunningUI(s); }
         else if (s.sent > 0 || s.failed > 0) {
           progressContainer.classList.remove('hidden'); statsRow.classList.remove('hidden'); updateProgress(s);
@@ -631,6 +997,7 @@
   function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
   function showError(m) { if (campaignErrorText) campaignErrorText.textContent = m; campaignError.classList.remove('hidden'); campaignError.style.borderColor = ''; }
   function hideError() { campaignError.classList.add('hidden'); }
+  function generateCampaignId() { return `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
   function sendMsg(m) { return new Promise((r, j) => { try { chrome.runtime.sendMessage(m, (res) => { if (chrome.runtime.lastError) j(chrome.runtime.lastError); else r(res); }); } catch (e) { j(e); } }); }
   function cGet(k) { return new Promise((r, j) => { chrome.storage.local.get(k, (res) => { if (chrome.runtime.lastError) j(chrome.runtime.lastError); else r(res); }); }); }
   function cSet(d) { return new Promise((r, j) => { chrome.storage.local.set(d, () => { if (chrome.runtime.lastError) j(chrome.runtime.lastError); else r(); }); }); }
@@ -638,9 +1005,15 @@
   // ═══════════════════════════════════════
   //  INIT
   // ═══════════════════════════════════════
+  setupMediaPickers();
   setupSettings();
   setupDashboard();
   restoreState();
+  window.addEventListener('beforeunload', () => {
+    clearSelectedMedia('quick');
+    clearSelectedMedia('campaign');
+    clearQuickSendSafetyTimer();
+  });
 
   setTimeout(() => {
     if (window.WALeads) { window.WALeads.setupToolbar(); window.WALeads.setupTagFilters(); }

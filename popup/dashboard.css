@@ -39,6 +39,13 @@
   color: var(--text-muted);
 }
 
+#dash-last-updated {
+  display: inline-block;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .dash-refresh-btn {
   display: flex;
   align-items: center;
@@ -51,7 +58,7 @@
   border: 1px solid var(--navy-600);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.14s ease-out, color 0.14s ease-out, background-color 0.14s ease-out;
 }
 
 .dash-refresh-btn:hover { border-color: var(--emerald-500); color: var(--emerald-400); }
@@ -134,11 +141,11 @@
 .chart-svg { width: 100%; overflow: visible; }
 
 .chart-bar {
-  transition: height 0.6s ease, y 0.6s ease;
+  transition: none;
   cursor: pointer;
 }
 
-.chart-bar:hover { filter: brightness(1.2); }
+.chart-bar:hover { filter: none; }
 
 .chart-tooltip {
   position: absolute;
@@ -182,7 +189,7 @@
 .funnel-bar-fill {
   height: 100%;
   border-radius: 4px;
-  transition: width 0.8s ease;
+  transition: none;
   display: flex;
   align-items: center;
   padding-left: 8px;

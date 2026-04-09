@@ -9,6 +9,7 @@
 
   let currentRange = '7d';
   let autoRefreshTimer = null;
+  let timestampTimer = null;
   let lastUpdated = Date.now();
 
   // ═══════════════════════════════════════
@@ -26,12 +27,18 @@
     }
   }
 
+  function isDashboardVisible() {
+    const panel = document.getElementById('tab-dashboard');
+    return !!panel && panel.classList.contains('active');
+  }
+
   // ═══════════════════════════════════════
   //  INIT
   // ═══════════════════════════════════════
   async function initDashboard() {
     await refreshDashboard();
     startAutoRefresh();
+    startTimestampTicker();
   }
 
   async function refreshDashboard() {
@@ -57,12 +64,13 @@
   function startAutoRefresh() {
     stopAutoRefresh();
     autoRefreshTimer = setInterval(() => {
-      refreshDashboard();
+      if (isDashboardVisible()) refreshDashboard();
     }, 30000);
   }
 
   function stopAutoRefresh() {
     if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+    stopTimestampTicker();
   }
 
   function updateTimestamp() {
@@ -72,7 +80,19 @@
     el.textContent = sec < 5 ? 'just now' : `${sec}s ago`;
   }
 
-  setInterval(updateTimestamp, 5000);
+  function startTimestampTicker() {
+    if (timestampTimer) return;
+    timestampTimer = setInterval(() => {
+      if (isDashboardVisible()) updateTimestamp();
+    }, 5000);
+  }
+
+  function stopTimestampTicker() {
+    if (timestampTimer) {
+      clearInterval(timestampTimer);
+      timestampTimer = null;
+    }
+  }
 
   // ═══════════════════════════════════════
   //  KPI CARDS
@@ -152,8 +172,8 @@
       const sentY = padT + chartH - sentH;
       const repliedY = padT + chartH - repliedH;
 
-      bars += `<rect class="chart-bar" x="${x - barW - gap / 2}" y="${sentY}" width="${barW}" height="${sentH}" rx="2" fill="#3B82F6" data-val="Sent: ${d.sent}" data-day="${d.date}"><animate attributeName="height" from="0" to="${sentH}" dur="0.6s" fill="freeze"/><animate attributeName="y" from="${padT + chartH}" to="${sentY}" dur="0.6s" fill="freeze"/></rect>`;
-      bars += `<rect class="chart-bar" x="${x + gap / 2}" y="${repliedY}" width="${barW}" height="${repliedH}" rx="2" fill="#25D366" data-val="Replied: ${d.replied}" data-day="${d.date}"><animate attributeName="height" from="0" to="${repliedH}" dur="0.6s" fill="freeze"/><animate attributeName="y" from="${padT + chartH}" to="${repliedY}" dur="0.6s" fill="freeze"/></rect>`;
+      bars += `<rect class="chart-bar" x="${x - barW - gap / 2}" y="${sentY}" width="${barW}" height="${sentH}" rx="2" fill="#3B82F6" data-val="Sent: ${d.sent}" data-day="${d.date}"></rect>`;
+      bars += `<rect class="chart-bar" x="${x + gap / 2}" y="${repliedY}" width="${barW}" height="${repliedH}" rx="2" fill="#25D366" data-val="Replied: ${d.replied}" data-day="${d.date}"></rect>`;
 
       labels += `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#5A6D8A">${d.date}</text>`;
     });

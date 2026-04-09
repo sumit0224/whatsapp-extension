@@ -160,6 +160,27 @@
       'button[aria-label="Send"]',
     ],
 
+    // Attachment entry points
+    attachButton: [
+      'button[data-testid="clip"]',
+      'span[data-testid="clip"]',
+      'button[aria-label*="Attach"]',
+      'div[title*="Attach"]',
+    ],
+
+    mediaInput: [
+      'input[type="file"][accept*="image"]',
+      'input[type="file"][accept*="video"]',
+      'input[type="file"][accept*="image/*,video/*"]',
+      'input[type="file"]',
+    ],
+
+    mediaCaptionBox: [
+      'div[contenteditable="true"][data-testid="media-caption-input"]',
+      'div[data-testid="media-caption-input-container"] div[contenteditable="true"]',
+      'div[contenteditable="true"][role="textbox"]',
+    ],
+
     // Invalid number detection
     invalidNumberTexts: [
       'phone number shared via url is not on whatsapp',
@@ -443,6 +464,7 @@
 
     // Fallback: simulate Enter key press
     try {
+      const target = inputBox || document.activeElement || document.body;
       const enterEvent = new KeyboardEvent('keydown', {
         key: 'Enter',
         code: 'Enter',
@@ -451,11 +473,112 @@
         bubbles: true,
         cancelable: true,
       });
-      inputBox.dispatchEvent(enterEvent);
+      target.dispatchEvent(enterEvent);
       return true;
     } catch (err) {
       console.error('[WAuto] clickSend fallback error:', err);
       return false;
+    }
+  }
+
+  // ═══════════════════════════════════════
+  //  SECTION C2: MEDIA ATTACH + SEND
+  // ═══════════════════════════════════════
+  function sanitizeIncomingMedia(mediaPayload) {
+    if (!mediaPayload || typeof mediaPayload !== 'object') return null;
+    if (typeof mediaPayload.dataUrl !== 'string' || !mediaPayload.dataUrl.startsWith('data:')) return null;
+    const size = Number(mediaPayload.size || 0);
+    if (size <= 0 || size > 16 * 1024 * 1024) return null;
+    const kind = mediaPayload.kind === 'video' ? 'video' : 'image';
+    return {
+      name: String(mediaPayload.name || `media-${Date.now()}`),
+      type: String(mediaPayload.type || ''),
+      size,
+      kind,
+      dataUrl: mediaPayload.dataUrl,
+    };
+  }
+
+  function dataUrlToFile(dataUrl, fileName, mimeType) {
+    const parts = dataUrl.split(',');
+    if (parts.length < 2) return null;
+    const header = parts[0];
+    const mimeMatch = header.match(/data:([^;]+);base64/);
+    const finalMime = mimeType || (mimeMatch ? mimeMatch[1] : 'application/octet-stream');
+    const binary = atob(parts[1]);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], fileName || `media-${Date.now()}`, { type: finalMime });
+  }
+
+  function findMediaFileInput() {
+    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    return inputs.find((input) => {
+      const accept = (input.getAttribute('accept') || '').toLowerCase();
+      return accept.includes('image') || accept.includes('video');
+    }) || null;
+  }
+
+  async function waitForMediaInput(timeout = 6000, interval = 200) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const input = findMediaFileInput();
+      if (input) return input;
+      await sleep(interval);
+    }
+    return null;
+  }
+
+  async function sendMediaWithCaption(mediaPayload, captionText) {
+    try {
+      const media = sanitizeIncomingMedia(mediaPayload);
+      if (!media) return { success: false, reason: 'invalid_media_payload' };
+
+      // Open attachment tray if needed
+      let input = await waitForMediaInput(2500, 150);
+      if (!input) {
+        const attachBtn = await waitForElement(SELECTORS.attachButton, 6000, 200);
+        if (!attachBtn) return { success: false, reason: 'attach_button_not_found' };
+        attachBtn.click();
+        await sleep(350);
+        input = await waitForMediaInput(6000, 200);
+      }
+      if (!input) return { success: false, reason: 'media_input_not_found' };
+
+      const file = dataUrlToFile(media.dataUrl, media.name, media.type);
+      if (!file) return { success: false, reason: 'media_decode_failed' };
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Wait for media preview composer to appear
+      await sleep(1300);
+
+      const caption = (captionText || '').trim();
+      if (caption) {
+        const captionBox = await waitForElement([...SELECTORS.mediaCaptionBox, ...SELECTORS.composeBox], 8000, 200);
+        if (!captionBox) return { success: false, reason: 'caption_box_not_found' };
+        captionBox.click();
+        captionBox.focus();
+        await sleep(250);
+        const typed = await humanType(captionBox, caption);
+        if (!typed) {
+          const fallback = await bulkInsert(captionBox, caption);
+          if (!fallback) return { success: false, reason: 'caption_insert_failed' };
+        }
+        await sleep(randomBetween(400, 900));
+      }
+
+      const sent = await clickSend(document.activeElement);
+      if (!sent) return { success: false, reason: 'send_failed' };
+      await sleep(700);
+      return { success: true };
+    } catch (err) {
+      console.error('[WAuto] sendMediaWithCaption error:', err);
+      return { success: false, reason: 'send_failed' };
     }
   }
 
@@ -481,8 +604,11 @@
             return;
           }
 
-          // Step 2: Type and send the message
-          const sendResult = await typeAndSend(msg.message);
+          // Step 2: Send text-only or media+caption
+          const hasMedia = msg.media && typeof msg.media === 'object' && !!msg.media.dataUrl;
+          const sendResult = hasMedia
+            ? await sendMediaWithCaption(msg.media, msg.message || '')
+            : await typeAndSend(msg.message || '');
           sendResponse(sendResult);
         } catch (err) {
           console.error('[WAuto] SEND_MESSAGE handler error:', err);
@@ -515,8 +641,11 @@
             return;
           }
 
-          // Type and send the message
-          const sendResult = await typeAndSend(msg.message);
+          // Send text-only or media+caption
+          const hasMedia = msg.media && typeof msg.media === 'object' && !!msg.media.dataUrl;
+          const sendResult = hasMedia
+            ? await sendMediaWithCaption(msg.media, msg.message || '')
+            : await typeAndSend(msg.message || '');
           
           // Inject dynamic inline reply watcher for 5 mins
           if (sendResult.success) {

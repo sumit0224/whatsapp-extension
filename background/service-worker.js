@@ -20,21 +20,50 @@ const RETRY_ALARM = 'retryChecker';
 // ── STATE ──
 let isProcessing = false;
 let whatsappTabId = null;
+let activeCampaignMedia = null;
 
 // ═══════════════════════════════════════
 //  MESSAGE LISTENER
 // ═══════════════════════════════════════
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'START_CAMPAIGN') {
-    if (!isProcessing) { isProcessing = true; processQueue(); }
-    sendResponse({ status: 'started' });
+    (async () => {
+      try {
+        const data = await storageGet('campaignState');
+        const state = data.campaignState || {};
+        const runtimeSettings = await loadRuntimeToggleSettings();
+        if (msg.campaignId) state.campaignId = msg.campaignId;
+        if (msg.campaignDbId !== undefined) state.campaignDbId = msg.campaignDbId;
+        if (msg.hasMedia !== undefined) state.hasMedia = !!msg.hasMedia;
+        if (msg.mediaPayload) activeCampaignMedia = sanitizeMediaPayload(msg.mediaPayload);
+        else if (!state.hasMedia) activeCampaignMedia = null;
+        state.runtimeSettings = runtimeSettings;
+        state.isRunning = true;
+        state.status = 'running';
+
+        await syncCampaignProgressState(state);
+        await storageSet({ campaignState: state });
+
+        if (!isProcessing) { isProcessing = true; processQueue(); }
+        sendResponse({ status: 'started', campaignId: state.campaignId || null });
+      } catch (e) {
+        sendResponse({ status: 'error', error: e.message });
+      }
+    })();
+    return true;
   }
   if (msg.action === 'QUICK_SEND') {
-    if (!isProcessing) { isProcessing = true; processQuickSend(msg); }
+    if (isProcessing) {
+      sendResponse({ status: 'busy', reason: 'Another send is already in progress' });
+      return true;
+    }
+    isProcessing = true;
+    processQuickSend(msg);
     sendResponse({ status: 'started' });
   }
   if (msg.action === 'STOP_CAMPAIGN') {
     isProcessing = false;
+    activeCampaignMedia = null;
     sendResponse({ status: 'stopped' });
   }
   if (msg.action === 'CHECK_WA_SESSION') {
@@ -58,18 +87,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function handleReplyDetected(data) {
   const lead = await getLead(data.phone);
   if (!lead || lead.status === 'pending') return;
+  const campaignDbId = lead.campaignDbId || (typeof lead.campaignId === 'number' ? lead.campaignId : null);
+  const runtimeSettings = await loadRuntimeToggleSettings();
 
   const autoTag = classifyReply(data.previewText);
   const updates = { status: 'replied', replyText: data.previewText, repliedAt: lead.repliedAt || data.timestamp };
   if (!lead.tag) updates.tag = autoTag;
   await updateLead(lead.id, updates);
 
-  await addMessage({ leadId: lead.id, campaignId: lead.campaignId, direction: 'inbound', body: data.previewText || '', sentAt: data.timestamp, type: 'manual' });
+  await addMessage({ leadId: lead.id, campaignId: campaignDbId || lead.campaignId || null, direction: 'inbound', body: data.previewText || '', sentAt: data.timestamp, type: 'manual' });
   await skipFollowUpsForLead(lead.id);
 
-  if (lead.campaignId) {
-    const campaign = await getCampaign(lead.campaignId);
-    if (campaign) await updateCampaign(lead.campaignId, { replied: (campaign.replied || 0) + 1 });
+  if (campaignDbId) {
+    const campaign = await getCampaign(campaignDbId);
+    if (campaign) await updateCampaign(campaignDbId, { replied: (campaign.replied || 0) + 1 });
   }
 
   // Update template reply rate
@@ -93,9 +124,14 @@ async function handleReplyDetected(data) {
   broadcastMessage({ action: 'REPLY_NOTIFICATION', leadName: lead.name, phone: lead.phone, tag: updates.tag || lead.tag, previewText: data.previewText });
 
   const finalTag = updates.tag || lead.tag || autoTag;
-  if (finalTag === 'hot') {
+  if (finalTag === 'hot' && runtimeSettings.notifyHotLead) {
     try {
-      chrome.notifications.create(`reply_${lead.id}_${Date.now()}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: '🔥 Hot Lead Reply — ' + (lead.name || lead.phone), message: (data.previewText || '').slice(0, 100) });
+      chrome.notifications.create(`reply_${lead.id}_${Date.now()}`, {
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: 'Hot lead replied',
+        message: `${lead.name || lead.phone} replied to your message`,
+      });
     } catch (e) { /* */ }
   }
 }
@@ -178,6 +214,7 @@ async function processScheduledCampaigns() {
       if (sc.scheduledFor > now) continue;
 
       await updateScheduledCampaign(sc.id, { status: 'running' });
+      const runtimeSettings = await loadRuntimeToggleSettings();
 
       // Create campaign record
       const counts = await getLeadCounts();
@@ -185,7 +222,7 @@ async function processScheduledCampaigns() {
 
       // Mark pending leads with campaign ID
       const pendingLeads = await getAllLeads({ status: 'pending' });
-      for (const lead of pendingLeads) { await updateLead(lead.id, { campaignId }); }
+      for (const lead of pendingLeads) { await updateLead(lead.id, { campaignId, campaignDbId: campaignId }); }
 
       // Save follow-up config
       if (sc.followUpTemplates) await storageSet({ followUpConfig: sc.followUpTemplates });
@@ -197,6 +234,8 @@ async function processScheduledCampaigns() {
         delayFixed: sc.delayConfig ? sc.delayConfig.fixed : 10,
         delayJitter: sc.delayConfig ? sc.delayConfig.jitter : 3,
         campaignId,
+        campaignDbId: campaignId,
+        runtimeSettings,
         rotateTemplates: sc.rotateTemplates || false,
         templateIds: sc.templateIds || [],
         rotationIndex: 0,
@@ -205,9 +244,11 @@ async function processScheduledCampaigns() {
       await storageSet({ campaignState, sendMode: sc.sendMode || 'dom' });
 
       // Browser notification
-      try {
-        chrome.notifications.create(`sched_${sc.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: '⏰ Scheduled Campaign Started', message: `Sending to ${counts.pending} contacts` });
-      } catch (e) { /* */ }
+      if (runtimeSettings.notifyScheduledStart) {
+        try {
+          chrome.notifications.create(`sched_${sc.id}`, { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Scheduled campaign started', message: `Sending to ${counts.pending} contacts` });
+        } catch (e) { /* */ }
+      }
 
       broadcastMessage({ action: 'SCHEDULED_CAMPAIGN_STARTED', name: sc.name, total: counts.pending });
 
@@ -339,7 +380,7 @@ function sendMessageToTab(tabId, message, timeoutMs) {
   });
 }
 
-async function executeDomSend(tabId, phone, message) {
+async function executeDomSend(tabId, phone, message, runtimeSettings = {}, mediaPayload = null) {
   try {
     const cleanPhone = phone.replace(/\+/g, '');
     console.log(`[executeDomSend] Existing WA tab found: ${tabId}`);
@@ -371,8 +412,16 @@ async function executeDomSend(tabId, phone, message) {
 
     if (isReady) {
       console.log(`[executeDomSend] Content script alive, sending TYPE_AND_SEND`);
+      if (runtimeSettings.enableTyping !== false) {
+        await delay(1000 + Math.random() * 1000);
+      }
       await storageSet({ lastSentPhone: phone });
-      return await sendMessageToTab(tabId, { action: 'TYPE_AND_SEND', phone: phone, message: message }, SEND_MESSAGE_TIMEOUT_MS);
+      return await sendMessageToTab(tabId, {
+        action: 'TYPE_AND_SEND',
+        phone: phone,
+        message: message,
+        media: sanitizeMediaPayload(mediaPayload),
+      }, SEND_MESSAGE_TIMEOUT_MS);
     } else {
       console.warn(`[executeDomSend] Content script failed to respond to PING`);
       return { success: false, reason: 'chat_load_timeout' };
@@ -407,6 +456,94 @@ async function processQueue() {
   else await processQueueLinkMode();
 }
 
+async function loadRuntimeToggleSettings() {
+  const settings = await storageGet([
+    'enableJitter',
+    'enableTyping',
+    'enableBreaks',
+    'notifyHotLead',
+    'notifyScheduledStart',
+    'wAutoSettings',
+  ]);
+  const wa = settings.wAutoSettings || {};
+  return {
+    enableJitter: (settings.enableJitter ?? wa.enableJitter) !== false,
+    enableTyping: (settings.enableTyping ?? wa.enableTyping) !== false,
+    enableBreaks: (settings.enableBreaks ?? wa.enableBreaks) !== false,
+    notifyHotLead: (settings.notifyHotLead ?? wa.notifyHotLead) !== false,
+    notifyScheduledStart: (settings.notifyScheduledStart ?? wa.notifyScheduledStart) !== false,
+  };
+}
+
+function getRuntimeToggleSettings(state) {
+  const runtime = (state && state.runtimeSettings) || {};
+  return {
+    enableJitter: runtime.enableJitter !== false,
+    enableTyping: runtime.enableTyping !== false,
+    enableBreaks: runtime.enableBreaks !== false,
+    notifyHotLead: runtime.notifyHotLead !== false,
+    notifyScheduledStart: runtime.notifyScheduledStart !== false,
+  };
+}
+
+async function syncCampaignProgressState(state) {
+  // Legacy campaigns may not have campaignId — keep historical behavior for them.
+  if (!state || !state.campaignId) return state;
+  const scoped = await getLeadCounts({ campaignId: state.campaignId });
+  state.total = scoped.total;
+  state.sent = scoped.sent;
+  state.failed = scoped.failed;
+  return state;
+}
+
+async function getTodaySentCount(todayMidnightTs) {
+  return db.leads
+    .where('sentAt')
+    .aboveOrEqual(todayMidnightTs)
+    .and((lead) => lead.status === 'sent')
+    .count();
+}
+
+async function getPendingLeadsForState(state) {
+  if (state && state.campaignId) return getAllLeads({ campaignId: state.campaignId, status: 'pending' });
+  return getAllLeads({ status: 'pending' });
+}
+
+function getCampaignDbIdFromState(state) {
+  if (!state) return null;
+  if (state.campaignDbId) return state.campaignDbId;
+  if (typeof state.campaignId === 'number') return state.campaignId;
+  return null;
+}
+
+function getPerMessageDelayMs(state, runtimeSettings) {
+  const fixedSeconds = Math.max(5, state.delayFixed || 10);
+  const jitterSeconds = Math.max(0, state.delayJitter || 3);
+  if (!runtimeSettings.enableJitter) return Math.max(MIN_DELAY_MS, fixedSeconds * 1000);
+  return Math.max(MIN_DELAY_MS, (fixedSeconds + Math.random() * jitterSeconds) * 1000);
+}
+
+function getBreakDurationMs(breakMinutes) {
+  const baseSeconds = Math.max(1, breakMinutes || 1) * 60;
+  return (baseSeconds + Math.random() * 30) * 1000;
+}
+
+function sanitizeMediaPayload(mediaPayload) {
+  if (!mediaPayload || typeof mediaPayload !== 'object') return null;
+  if (!mediaPayload.dataUrl || typeof mediaPayload.dataUrl !== 'string') return null;
+  if (!mediaPayload.dataUrl.startsWith('data:')) return null;
+  const size = Number(mediaPayload.size || 0);
+  if (size <= 0 || size > 16 * 1024 * 1024) return null;
+  const kind = mediaPayload.kind === 'video' ? 'video' : 'image';
+  return {
+    name: String(mediaPayload.name || 'media'),
+    type: String(mediaPayload.type || ''),
+    size,
+    kind,
+    dataUrl: mediaPayload.dataUrl,
+  };
+}
+
 // ═══════════════════════════════════════
 //  DOM MODE
 // ═══════════════════════════════════════
@@ -433,32 +570,32 @@ async function processQueueDomMode() {
 
   // Check daily limit
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayMessages = await getMessagesByDateRange(todayStart.getTime(), Date.now());
-  const todaySent = todayMessages.filter((m) => m.direction === 'outbound').length;
 
   let messagesSinceBreak = 0;
-  const breakEvery = breakAfter - 2 + Math.floor(Math.random() * 5);
+  const breakEvery = Math.max(1, breakAfter || 20);
 
   while (isProcessing) {
     try {
       const data = await storageGet('campaignState');
       const state = data.campaignState || {};
       if (!state.isRunning) { isProcessing = false; break; }
+      const campaignDbId = getCampaignDbIdFromState(state);
+      const runtimeSettings = getRuntimeToggleSettings(state);
 
       // Daily limit check
       if (settings.showBanWarning !== false) {
-        const currentTotal = todaySent + (state.sent || 0);
-        if (currentTotal >= dailyLimit) {
+        const todaySent = await getTodaySentCount(todayStart.getTime());
+        if (todaySent >= dailyLimit) {
           state.isRunning = false; state.status = 'daily_limit';
           await storageSet({ campaignState: state });
           isProcessing = false;
-          broadcastMessage({ action: 'CAMPAIGN_ERROR', error: `Daily message limit (${dailyLimit}) reached. Resume tomorrow.` });
+          broadcastMessage({ action: 'CAMPAIGN_ERROR', error: `Daily message limit (${dailyLimit}) reached today. Campaign paused.` });
           break;
         }
       }
 
       // Get next pending lead
-      const allLeads = await getAllLeads({ status: 'pending' });
+      const allLeads = await getPendingLeadsForState(state);
       const validLeads = allLeads.filter((l) => isValidPhone(l.phone));
       const nextLead = validLeads[0];
 
@@ -466,7 +603,16 @@ async function processQueueDomMode() {
         state.isRunning = false; state.status = 'completed';
         await storageSet({ campaignState: state });
         isProcessing = false;
-        if (state.campaignId) await updateCampaign(state.campaignId, { status: 'completed', completedAt: Date.now(), sent: state.sent, failed: state.failed });
+        activeCampaignMedia = null;
+        if (campaignDbId) {
+          await updateCampaign(campaignDbId, {
+            status: 'completed',
+            completedAt: Date.now(),
+            sent: state.sent || 0,
+            failed: state.failed || 0,
+            totalContacts: state.total || 0,
+          });
+        }
 
         // Notification
         const notifSettings = await storageGet('wAutoSettings');
@@ -474,13 +620,13 @@ async function processQueueDomMode() {
           try { chrome.notifications.create('campaign_done', { type: 'basic', iconUrl: 'icons/icon128.png', title: '✅ Campaign Complete', message: `Sent ${state.sent || 0} of ${state.total || 0} messages` }); } catch (e) { /* */ }
         }
 
-        broadcastMessage({ action: 'CAMPAIGN_COMPLETE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0 });
+        broadcastMessage({ action: 'CAMPAIGN_COMPLETE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, campaignId: state.campaignId || null });
         break;
       }
 
       // Anti-ban break
-      if (messagesSinceBreak >= breakEvery) {
-        const breakDuration = (breakMins * 60 + Math.random() * BREAK_DURATION_JITTER_S) * 1000;
+      if (runtimeSettings.enableBreaks && messagesSinceBreak >= breakEvery) {
+        const breakDuration = getBreakDurationMs(breakMins);
         broadcastMessage({ action: 'BREAK_STARTED', breakEndTime: Date.now() + breakDuration, breakDurationMs: breakDuration });
         await delay(breakDuration);
         messagesSinceBreak = 0;
@@ -506,21 +652,36 @@ async function processQueueDomMode() {
         state._currentTemplateId = null;
       }
 
-      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone });
+      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone, campaignId: state.campaignId || null });
 
       let response;
-      try { response = await executeDomSend(whatsappTabId, nextLead.phone, personalised); }
+      const campaignMedia = state.hasMedia ? activeCampaignMedia : null;
+      if (state.hasMedia && !campaignMedia) {
+        state.isRunning = false;
+        state.status = 'media_missing';
+        await storageSet({ campaignState: state });
+        isProcessing = false;
+        broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Campaign media is unavailable. Reattach media and restart campaign.' });
+        break;
+      }
+      try { response = await executeDomSend(whatsappTabId, nextLead.phone, personalised, runtimeSettings, campaignMedia); }
       catch (e) { response = { success: false, reason: 'send_failed' }; }
 
       if (response && response.success) {
-        await updateLead(nextLead.id, { status: 'sent', sentAt: Date.now(), campaignId: state.campaignId || null });
+        const sentAt = Date.now();
+        await updateLead(nextLead.id, {
+          status: 'sent',
+          sentAt,
+          campaignId: state.campaignId || nextLead.campaignId || null,
+          campaignDbId: campaignDbId || nextLead.campaignDbId || null,
+        });
         state.sent = (state.sent || 0) + 1;
         console.log(`[processQueue] Lead marked sent: ${nextLead.phone}`);
-        await addMessage({ leadId: nextLead.id, campaignId: state.campaignId, direction: 'outbound', body: personalised, type: 'initial', templateId: state._currentTemplateId });
-        await scheduleFollowUps(nextLead, state.campaignId);
+        await addMessage({ leadId: nextLead.id, campaignId: campaignDbId || state.campaignId || null, direction: 'outbound', body: personalised, sentAt, type: 'initial', templateId: state._currentTemplateId });
+        await scheduleFollowUps(nextLead, campaignDbId || state.campaignId || null);
       } else {
         const reason = (response && response.reason) || 'send_failed';
-        await handleSendFailure(nextLead, reason, personalised, state.campaignId);
+        await handleSendFailure(nextLead, reason, personalised, campaignDbId || state.campaignId || null);
         state.failed = (state.failed || 0) + 1;
 
         if (reason === 'whatsapp_disconnected') {
@@ -536,14 +697,12 @@ async function processQueueDomMode() {
       await storageSet({ campaignState: state });
       messagesSinceBreak++;
 
-      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone });
+      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone, campaignId: state.campaignId || null });
 
       const cs = await storageGet('campaignState');
       if (!cs.campaignState || !cs.campaignState.isRunning) { isProcessing = false; break; }
 
-      const fD = Math.max(5, state.delayFixed || 10);
-      const jD = Math.max(0, state.delayJitter || 3);
-      await delay(Math.max(MIN_DELAY_MS, (fD + Math.random() * jD) * 1000));
+      await delay(getPerMessageDelayMs(state, runtimeSettings));
 
     } catch (err) { console.error('[WAuto] processQueueDomMode error:', err); await delay(3000); }
   }
@@ -553,19 +712,56 @@ async function processQueueDomMode() {
 //  LINK MODE
 // ═══════════════════════════════════════
 async function processQueueLinkMode() {
+  const settingsData = await storageGet('wAutoSettings');
+  const settings = settingsData.wAutoSettings || {};
+  const breakAfter = settings.breakAfterMessages || 30;
+  const breakMins = settings.breakDurationMinutes || 3;
+  const breakEvery = Math.max(1, breakAfter || 20);
+  let messagesSinceBreak = 0;
+
   while (isProcessing) {
     try {
       const data = await storageGet('campaignState');
       const state = data.campaignState || {};
       if (!state.isRunning) { isProcessing = false; break; }
+      const campaignDbId = getCampaignDbIdFromState(state);
+      const runtimeSettings = getRuntimeToggleSettings(state);
+      if (state.hasMedia) {
+        state.isRunning = false;
+        state.status = 'media_dom_required';
+        await storageSet({ campaignState: state });
+        isProcessing = false;
+        broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Media campaigns require DOM mode. Please switch send mode to DOM.' });
+        break;
+      }
 
-      const allLeads = await getAllLeads({ status: 'pending' });
+      const allLeads = await getPendingLeadsForState(state);
       const nextLead = allLeads.filter((l) => isValidPhone(l.phone))[0];
 
       if (!nextLead) {
         state.isRunning = false; state.status = 'completed';
         await storageSet({ campaignState: state }); isProcessing = false;
-        broadcastMessage({ action: 'CAMPAIGN_COMPLETE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0 }); break;
+        activeCampaignMedia = null;
+        if (campaignDbId) {
+          await updateCampaign(campaignDbId, {
+            status: 'completed',
+            completedAt: Date.now(),
+            sent: state.sent || 0,
+            failed: state.failed || 0,
+            totalContacts: state.total || 0,
+          });
+        }
+        broadcastMessage({ action: 'CAMPAIGN_COMPLETE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, campaignId: state.campaignId || null }); break;
+      }
+
+      if (runtimeSettings.enableBreaks && messagesSinceBreak >= breakEvery) {
+        const breakDuration = getBreakDurationMs(breakMins);
+        broadcastMessage({ action: 'BREAK_STARTED', breakEndTime: Date.now() + breakDuration, breakDurationMs: breakDuration });
+        await delay(breakDuration);
+        messagesSinceBreak = 0;
+        broadcastMessage({ action: 'BREAK_ENDED' });
+        const fs = await storageGet('campaignState');
+        if (!fs.campaignState || !fs.campaignState.isRunning) { isProcessing = false; break; }
       }
 
       // Template rotation for link mode too
@@ -592,23 +788,29 @@ async function processQueueLinkMode() {
         }
         await storageSet({ whatsappTabId });
         await delay(TAB_CLOSE_DELAY_MS);
-        await updateLead(nextLead.id, { status: 'sent', sentAt: Date.now(), campaignId: state.campaignId || null });
+        const sentAt = Date.now();
+        await updateLead(nextLead.id, {
+          status: 'sent',
+          sentAt,
+          campaignId: state.campaignId || nextLead.campaignId || null,
+          campaignDbId: campaignDbId || nextLead.campaignDbId || null,
+        });
         state.sent = (state.sent || 0) + 1;
-        await addMessage({ leadId: nextLead.id, campaignId: state.campaignId, direction: 'outbound', body: personalised, type: 'initial' });
-        await scheduleFollowUps(nextLead, state.campaignId);
+        await addMessage({ leadId: nextLead.id, campaignId: campaignDbId || state.campaignId || null, direction: 'outbound', body: personalised, sentAt, type: 'initial' });
+        await scheduleFollowUps(nextLead, campaignDbId || state.campaignId || null);
       } catch (e) {
-        await handleSendFailure(nextLead, 'send_failed', personalised, state.campaignId);
+        await handleSendFailure(nextLead, 'send_failed', personalised, campaignDbId || state.campaignId || null);
         state.failed = (state.failed || 0) + 1;
       }
 
       state.currentIndex = (state.currentIndex || 0) + 1;
       await storageSet({ campaignState: state });
-      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone });
+      messagesSinceBreak++;
+      broadcastMessage({ action: 'PROGRESS_UPDATE', sent: state.sent || 0, failed: state.failed || 0, total: state.total || 0, currentContact: nextLead.name || nextLead.phone, campaignId: state.campaignId || null });
 
       const fd = await storageGet('campaignState');
       if (!fd.campaignState || !fd.campaignState.isRunning) { isProcessing = false; break; }
-      const fD = Math.max(5, state.delayFixed || 10); const jD = Math.max(0, state.delayJitter || 3);
-      await delay(Math.max(MIN_DELAY_MS, (fD + Math.random() * jD) * 1000));
+      await delay(getPerMessageDelayMs(state, runtimeSettings));
     } catch (err) { console.error('[WAuto] processQueueLinkMode error:', err); await delay(2000); }
   }
 }
@@ -618,49 +820,61 @@ async function processQueueLinkMode() {
 // ═══════════════════════════════════════
 async function processQuickSend(data) {
   const { numbers, message, delayFixed, delayJitter, sendMode } = data;
+  const mediaPayload = sanitizeMediaPayload(data.mediaPayload);
   let sent = 0;
-  
-  if (sendMode === 'dom') {
-    try { await findOrOpenWhatsAppTab(); } catch (err) {
-      isProcessing = false; broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Could not open WhatsApp Web tab.' }); return;
-    }
-    try {
-      const session = await checkWhatsAppSession();
-      if (session.status === 'qr_needed') {
-        isProcessing = false; broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Please scan QR code in the WhatsApp Web tab.' }); return;
-      }
-    } catch (e) { /* */ }
-  }
 
-  for (let i = 0; i < numbers.length; i++) {
-    if (!isProcessing) break;
-    const phone = numbers[i];
-    
-    broadcastMessage({ action: 'QUICK_SEND_PROGRESS', sent, total: numbers.length });
+  try {
+    if (mediaPayload && sendMode !== 'dom') {
+      broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Quick send with media requires DOM mode.' });
+      return;
+    }
 
     if (sendMode === 'dom') {
-      let response;
-      try { response = await executeDomSend(whatsappTabId, phone, message); }
-      catch (e) { response = { success: false }; }
-      if (response && response.success) sent++;
-    } else {
+      try { await findOrOpenWhatsAppTab(); } catch (err) {
+        broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Could not open WhatsApp Web tab.' });
+        return;
+      }
       try {
-        const tab = await chrome.tabs.create({ url: `https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(message)}`, active: false });
-        await delay(TAB_CLOSE_DELAY_MS);
-        try { await chrome.tabs.remove(tab.id); } catch (e) { /* */ }
-        sent++;
+        const session = await checkWhatsAppSession();
+        if (session.status === 'qr_needed') {
+          broadcastMessage({ action: 'CAMPAIGN_ERROR', error: 'Please scan QR code in the WhatsApp Web tab.' });
+          return;
+        }
       } catch (e) { /* */ }
     }
-    
-    if (i < numbers.length - 1) {
-      const fD = Math.max(5, delayFixed || 10);
-      const jD = Math.max(0, delayJitter || 3);
-      await delay(Math.max(MIN_DELAY_MS, (fD + Math.random() * jD) * 1000));
-    }
-  }
 
-  isProcessing = false;
-  broadcastMessage({ action: 'QUICK_SEND_COMPLETE', sent, total: numbers.length });
+    for (let i = 0; i < numbers.length; i++) {
+      if (!isProcessing) break;
+      const phone = numbers[i];
+
+      broadcastMessage({ action: 'QUICK_SEND_PROGRESS', sent, total: numbers.length });
+
+      if (sendMode === 'dom') {
+        let response;
+        try { response = await executeDomSend(whatsappTabId, phone, message, {}, mediaPayload); }
+        catch (e) { response = { success: false }; }
+        if (response && response.success) sent++;
+      } else {
+        try {
+          const tab = await chrome.tabs.create({ url: `https://wa.me/${phone.replace('+', '')}?text=${encodeURIComponent(message)}`, active: false });
+          await delay(TAB_CLOSE_DELAY_MS);
+          try { await chrome.tabs.remove(tab.id); } catch (e) { /* */ }
+          sent++;
+        } catch (e) { /* */ }
+      }
+
+      if (i < numbers.length - 1) {
+        const fD = Math.max(5, delayFixed || 10);
+        const jD = Math.max(0, delayJitter || 3);
+        await delay(Math.max(MIN_DELAY_MS, (fD + Math.random() * jD) * 1000));
+      }
+    }
+  } catch (err) {
+    console.error('[WAuto] processQuickSend error:', err);
+  } finally {
+    isProcessing = false;
+    broadcastMessage({ action: 'QUICK_SEND_COMPLETE', sent, total: numbers.length });
+  }
 }
 
 // ═══════════════════════════════════════
